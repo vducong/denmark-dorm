@@ -1,0 +1,17 @@
+# Copy to config.yaml and fill in your values.
+# Override file path: CONFIG_PATH=/path/to/config.yaml
+
+kkik:
+  email: you@example.com
+  password: your-password
+  headless: true
+  timeout_sec: 120
+  # debug_dir: ./debug
+
+email:
+  to: you@example.com
+  from: you@example.com
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  smtp_user: you@example.com
+  smtp_password: your-gmail-app-password

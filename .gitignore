@@ -1,0 +1,7 @@
+config.yaml
+.env
+
+kkik-waitlist
+*_kkik_waitlist.csv
+testdata/
+debug/
