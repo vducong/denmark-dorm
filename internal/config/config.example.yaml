@@ -22,3 +22,9 @@ sheets:
   sheet_name: Sheet1
   oauth_client_file: ./client_secret.json
   oauth_token_file: ./token.json
+
+# Pipeline steps (all default to true). Env: STEPS_CRAWL, STEPS_EMAIL, STEPS_SHEET
+steps:
+  crawl: true   # live scrape + write CSV
+  email: true   # SMTP report with CSV attachment
+  sheet: true   # upload rows (also requires sheets.spreadsheet_id)

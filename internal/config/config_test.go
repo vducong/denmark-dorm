@@ -43,6 +43,35 @@ email:
 	if cfg.Sheets.SheetName != defaultSheetName {
 		t.Errorf("sheet_name = %q", cfg.Sheets.SheetName)
 	}
+	if !cfg.StepCrawlEnabled() || !cfg.StepEmailEnabled() {
+		t.Errorf("steps defaults: crawl=%v email=%v", cfg.Steps.Crawl, cfg.Steps.Email)
+	}
+}
+
+func TestStepSheetEnabled(t *testing.T) {
+	cfg := &Config{Steps: Steps{Sheet: true}}
+	if cfg.StepSheetEnabled() {
+		t.Fatal("expected false without spreadsheet_id")
+	}
+	cfg.Sheets.SpreadsheetID = "abc"
+	if !cfg.StepSheetEnabled() {
+		t.Fatal("expected true with sheet step and spreadsheet_id")
+	}
+	cfg.Steps.Sheet = false
+	if cfg.StepSheetEnabled() {
+		t.Fatal("expected false when steps.sheet is false")
+	}
+}
+
+func TestValidateSteps(t *testing.T) {
+	cfg := &Config{}
+	if err := cfg.ValidateSteps(); err == nil {
+		t.Fatal("expected error when all steps disabled")
+	}
+	cfg.Steps.Email = true
+	if err := cfg.ValidateSteps(); err != nil {
+		t.Fatalf("ValidateSteps: %v", err)
+	}
 }
 
 func TestSheetsEnabled(t *testing.T) {

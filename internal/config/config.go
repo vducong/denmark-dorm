@@ -25,6 +25,14 @@ type Config struct {
 	KKIK   KKIK   `yaml:"kkik"`
 	Email  Email  `yaml:"email"`
 	Sheets Sheets `yaml:"sheets"`
+	Steps  Steps  `yaml:"steps"`
+}
+
+// Steps toggles pipeline phases (crawl+CSV, email, sheet update).
+type Steps struct {
+	Crawl bool `yaml:"crawl" env:"STEPS_CRAWL" env-default:"true"`
+	Email bool `yaml:"email" env:"STEPS_EMAIL" env-default:"true"`
+	Sheet bool `yaml:"sheet" env:"STEPS_SHEET" env-default:"true"`
 }
 
 // Sheets holds Google Sheets export settings (OAuth).
@@ -84,9 +92,32 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// SheetsEnabled reports whether Google Sheets upload should run.
+// SheetsEnabled reports whether a spreadsheet ID is configured.
 func (c *Config) SheetsEnabled() bool {
 	return c.Sheets.SpreadsheetID != ""
+}
+
+// StepCrawlEnabled reports whether live scrape and CSV export should run.
+func (c *Config) StepCrawlEnabled() bool {
+	return c.Steps.Crawl
+}
+
+// StepEmailEnabled reports whether the SMTP report should be sent.
+func (c *Config) StepEmailEnabled() bool {
+	return c.Steps.Email
+}
+
+// StepSheetEnabled reports whether rows should be uploaded to Google Sheets.
+func (c *Config) StepSheetEnabled() bool {
+	return c.Steps.Sheet && c.SheetsEnabled()
+}
+
+// ValidateSteps checks that at least one pipeline step is enabled.
+func (c *Config) ValidateSteps() error {
+	if !c.StepCrawlEnabled() && !c.StepEmailEnabled() && !c.StepSheetEnabled() {
+		return fmt.Errorf("at least one of steps.crawl, steps.email, or steps.sheet must be enabled")
+	}
+	return nil
 }
 
 // SheetURL returns a browser link to the configured spreadsheet.

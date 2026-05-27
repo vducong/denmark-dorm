@@ -10,16 +10,16 @@ Go CLI that logs into [Kollegiernes Kontor i København](https://www.kollegierne
 ## Setup
 
 ```bash
-cp config.example.yaml config.yaml
-# Edit config.yaml with your KKIK and SMTP credentials
+cp internal/config/config.example.yaml internal/config/config.yaml
+# Edit internal/config/config.yaml with your KKIK and SMTP credentials
 make build
 ```
 
-Shortcuts: `make help` lists targets (`make parse`, `make run`, `make run-no-email`, `make dump`, `make test`).
+Shortcuts: `make help` lists targets (`make run`, `make run-no-email`, `make dump`, `make test`).
 
 ## Configuration
 
-[`config.yaml`](config.yaml) (not committed — copy from [`config.example.yaml`](config.example.yaml)):
+[`internal/config/config.yaml`](internal/config/config.yaml) (not committed — copy from [`internal/config/config.example.yaml`](internal/config/config.example.yaml)):
 
 ```yaml
 kkik:
@@ -41,11 +41,30 @@ sheets:
     sheet_name: Sheet1
     oauth_client_file: ./client_secret.json
     oauth_token_file: ./token.json
+
+steps:
+    crawl: true
+    email: true
+    sheet: true
 ```
 
-Loaded with [cleanenv](https://github.com/ilyakaznacheev/cleanenv). Optional env overrides still work (e.g. `KKIK_EMAIL`, `EMAIL_TO`, `SHEETS_SPREADSHEET_ID`). Set `CONFIG_PATH` to use another file.
+Loaded with [cleanenv](https://github.com/ilyakaznacheev/cleanenv). Optional env overrides still work (e.g. `KKIK_EMAIL`, `EMAIL_TO`, `SHEETS_SPREADSHEET_ID`, `STEPS_EMAIL`). Set `CONFIG_PATH` to use another file.
 
-Leave `sheets.spreadsheet_id` empty to skip Google Sheets upload.
+### Pipeline steps
+
+| Key           | Default | What it does                                                                  |
+| ------------- | ------- | ----------------------------------------------------------------------------- |
+| `steps.crawl` | `true`  | Live scrape + write timestamped CSV (required; disabling exits with an error) |
+| `steps.email` | `true`  | Send SMTP report with CSV attachment                                          |
+| `steps.sheet` | `true`  | Upload rows to Google Sheets (also requires `sheets.spreadsheet_id`)          |
+
+Examples:
+
+- **Full run:** all `true` (default).
+- **Scrape + sheet, no email:** `steps.email: false` or `STEPS_EMAIL=false` (`make run-no-email`).
+- **Scrape + CSV only:** `steps.email: false` and `steps.sheet: false`, or leave `spreadsheet_id` empty and set `steps.sheet: false`.
+
+At least one step must be enabled. `steps.crawl` must stay `true` for normal runs.
 
 ## Google Sheets (OAuth)
 
@@ -96,23 +115,19 @@ To **see and edit** redirect URIs, you would need a separate **Web application**
 
 ## Usage
 
-**Offline parse** (no login, uses saved HTML):
-
-```bash
-make parse
-```
-
 **Full run** (login, scrape, CSV, optional sheet, email):
 
 ```bash
 make run
 ```
 
-**Scrape without email** (still updates the sheet if configured):
+**Scrape without email** (still updates the sheet if `steps.sheet` is true and configured):
 
 ```bash
 make run-no-email
 ```
+
+Same as setting `steps.email: false` in `config.yaml`.
 
 **Debug live HTML:**
 
@@ -120,12 +135,10 @@ make run-no-email
 make dump
 ```
 
-| Flag                | Description                                |
-| ------------------- | ------------------------------------------ |
-| `--parse-only PATH` | Parse local HTML only                      |
-| `--no-email`        | Skip SMTP                                  |
-| `--auth-sheets`     | One-time Google OAuth; writes `token.json` |
-| `--dump-html PATH`  | Save fetched HTML after live scrape        |
+| Flag               | Description                                |
+| ------------------ | ------------------------------------------ |
+| `--auth-sheets`    | One-time Google OAuth; writes `token.json` |
+| `--dump-html PATH` | Save fetched HTML after live scrape        |
 
 ## CSV
 
