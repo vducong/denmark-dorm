@@ -28,21 +28,6 @@ type Config struct {
 	Steps  Steps  `yaml:"steps"`
 }
 
-// Steps toggles pipeline phases (crawl+CSV, email, sheet update).
-type Steps struct {
-	Crawl bool `yaml:"crawl" env:"STEPS_CRAWL" env-default:"true"`
-	Email bool `yaml:"email" env:"STEPS_EMAIL" env-default:"true"`
-	Sheet bool `yaml:"sheet" env:"STEPS_SHEET" env-default:"true"`
-}
-
-// Sheets holds Google Sheets export settings (OAuth).
-type Sheets struct {
-	SpreadsheetID   string `yaml:"spreadsheet_id" env:"SHEETS_SPREADSHEET_ID"`
-	SheetName       string `yaml:"sheet_name" env:"SHEETS_SHEET_NAME"`
-	OAuthClientFile string `yaml:"oauth_client_file" env:"SHEETS_OAUTH_CLIENT_FILE"`
-	OAuthTokenFile  string `yaml:"oauth_token_file" env:"SHEETS_OAUTH_TOKEN_FILE"`
-}
-
 // KKIK holds portal login and scraper settings.
 type KKIK struct {
 	Email      string `yaml:"email" env:"KKIK_EMAIL"`
@@ -60,6 +45,21 @@ type Email struct {
 	SMTPPort     int    `yaml:"smtp_port" env:"SMTP_PORT" env-default:"587"`
 	SMTPUser     string `yaml:"smtp_user" env:"SMTP_USER"`
 	SMTPPassword string `yaml:"smtp_password" env:"SMTP_PASSWORD"`
+}
+
+// Sheets holds Google Sheets export settings (OAuth).
+type Sheets struct {
+	SpreadsheetID   string `yaml:"spreadsheet_id" env:"SHEETS_SPREADSHEET_ID"`
+	SheetName       string `yaml:"sheet_name" env:"SHEETS_SHEET_NAME"`
+	OAuthClientFile string `yaml:"oauth_client_file" env:"SHEETS_OAUTH_CLIENT_FILE"`
+	OAuthTokenFile  string `yaml:"oauth_token_file" env:"SHEETS_OAUTH_TOKEN_FILE"`
+}
+
+// Steps toggles pipeline phases (crawl+CSV, email, sheet update).
+type Steps struct {
+	Crawl bool `yaml:"crawl" env:"STEPS_CRAWL"`
+	Email bool `yaml:"email" env:"STEPS_EMAIL"`
+	Sheet bool `yaml:"sheet" env:"STEPS_SHEET"`
 }
 
 // Load reads config.yaml (or CONFIG_PATH) via cleanenv.

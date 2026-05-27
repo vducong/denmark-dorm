@@ -33,32 +33,20 @@ func run() int {
 		return 1
 	}
 
-	if *authSheets {
-		if err := cfg.ValidateSheetsAuth(); err != nil {
-			slog.Error("invalid sheets config", "err", err)
-			return 1
-		}
-		if err := sheets.Authenticate(context.Background(), cfg); err != nil {
-			slog.Error("sheets auth", "err", err)
-			return 1
-		}
-		slog.Info("sheets oauth complete", "token", cfg.Sheets.OAuthTokenFile)
-		return 0
-	}
-
 	if err := cfg.ValidateSteps(); err != nil {
 		slog.Error("invalid steps config", "err", err)
 		return 1
 	}
+
 	if !cfg.StepCrawlEnabled() {
 		slog.Error("steps.crawl is disabled; live scrape is required")
 		return 1
 	}
-
 	if err := cfg.ValidateKKIK(); err != nil {
 		slog.Error("invalid config", "err", err)
 		return 1
 	}
+
 	s := scraper.New(cfg)
 	html, err := s.FetchHTML(context.Background())
 	if err != nil {
@@ -90,6 +78,19 @@ func run() int {
 
 	var sheetURL string
 	if cfg.StepSheetEnabled() {
+		if *authSheets {
+			if err := cfg.ValidateSheetsAuth(); err != nil {
+				slog.Error("invalid sheets config", "err", err)
+				return 1
+			}
+			if err := sheets.Authenticate(context.Background(), cfg); err != nil {
+				slog.Error("sheets auth", "err", err)
+				return 1
+			}
+			slog.Info("sheets oauth complete", "token", cfg.Sheets.OAuthTokenFile)
+			return 0
+		}
+
 		if err := cfg.ValidateSheetsUpdate(); err != nil {
 			slog.Error("invalid sheets config", "err", err)
 			return 1
@@ -105,7 +106,6 @@ func run() int {
 	if !cfg.StepEmailEnabled() {
 		return 0
 	}
-
 	if err := cfg.ValidateSMTP(); err != nil {
 		slog.Error("invalid smtp config", "err", err)
 		return 1
