@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"denmark-housing-waitlist/internal/config"
 	"denmark-housing-waitlist/internal/export"
@@ -13,7 +14,10 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const sheetColumnCount = 5
+const (
+	sheetColumnCount = 5
+	headerRowIndex   = 1 // 0-based; row 0 is "Last updated at" metadata
+)
 
 // Update replaces header + data rows on the configured tab.
 func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) (string, error) {
@@ -28,10 +32,10 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) 
 	}
 
 	records := export.Records(rows)
-	values := recordsToValues(records)
-	if len(values) == 0 {
+	if len(records) == 0 {
 		return "", fmt.Errorf("no rows to write")
 	}
+	values := sheetValues(records, time.Now())
 
 	sheetID, err := sheetIDByName(svc, cfg.Sheets.SpreadsheetID, cfg.Sheets.SheetName)
 	if err != nil {
@@ -56,22 +60,22 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) 
 		return "", fmt.Errorf("update sheet: %w", err)
 	}
 
-	if err := formatHeaderRow(ctx, svc, cfg.Sheets.SpreadsheetID, sheetID); err != nil {
+	if err := formatSheet(ctx, svc, cfg.Sheets.SpreadsheetID, sheetID); err != nil {
 		return "", err
 	}
 
 	return cfg.SheetURL(), nil
 }
 
-func formatHeaderRow(ctx context.Context, svc *sheets.Service, spreadsheetID string, sheetID int64) error {
+func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string, sheetID int64) error {
 	_, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
 		Requests: []*sheets.Request{
 			{
 				RepeatCell: &sheets.RepeatCellRequest{
 					Range: &sheets.GridRange{
 						SheetId:          sheetID,
-						StartRowIndex:    0,
-						EndRowIndex:      1,
+						StartRowIndex:    headerRowIndex,
+						EndRowIndex:      headerRowIndex + 1,
 						StartColumnIndex: 0,
 						EndColumnIndex:   sheetColumnCount,
 					},
@@ -88,16 +92,26 @@ func formatHeaderRow(ctx context.Context, svc *sheets.Service, spreadsheetID str
 					Properties: &sheets.SheetProperties{
 						SheetId: sheetID,
 						GridProperties: &sheets.GridProperties{
-							FrozenRowCount: 1,
+							FrozenRowCount: headerRowIndex + 1,
 						},
 					},
 					Fields: "gridProperties.frozenRowCount",
 				},
 			},
+			{
+				AutoResizeDimensions: &sheets.AutoResizeDimensionsRequest{
+					Dimensions: &sheets.DimensionRange{
+						SheetId:    sheetID,
+						Dimension:  "COLUMNS",
+						StartIndex: 0,
+						EndIndex:   sheetColumnCount,
+					},
+				},
+			},
 		},
 	}).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("format header row: %w", err)
+		return fmt.Errorf("format sheet: %w", err)
 	}
 	return nil
 }
@@ -121,10 +135,19 @@ func sheetIDByName(svc *sheets.Service, spreadsheetID, sheetName string) (int64,
 	return 0, fmt.Errorf("sheet tab %q not found (available: %s)", sheetName, strings.Join(names, ", "))
 }
 
-func recordsToValues(records [][]string) [][]interface{} {
-	out := make([][]interface{}, len(records))
+// sheetValues prepends a metadata row: A1="Last updated at", B1=<timestamp>.
+func sheetValues(records [][]string, updatedAt time.Time) [][]any {
+	data := recordsToValues(records)
+	out := make([][]any, 0, len(data)+1)
+	out = append(out, []any{"Last updated at", updatedAt.Format(time.RFC3339)})
+	out = append(out, data...)
+	return out
+}
+
+func recordsToValues(records [][]string) [][]any {
+	out := make([][]any, len(records))
 	for i, rec := range records {
-		row := make([]interface{}, len(rec))
+		row := make([]any, len(rec))
 		for j, v := range rec {
 			row[j] = v
 		}
