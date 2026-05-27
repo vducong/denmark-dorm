@@ -6,7 +6,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/koan/kkik-waitlist/internal/parser"
+	"denmark-housing-waitlist/internal/parser"
 )
 
 // SortRows returns rows sorted by your_rank, then dorm, then room_type.
@@ -27,8 +27,6 @@ func SortRows(rows []parser.WaitlistRow) []parser.WaitlistRow {
 
 // WriteCSV writes sorted rows to path with a stable header.
 func WriteCSV(path string, rows []parser.WaitlistRow) error {
-	sorted := SortRows(rows)
-
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create csv: %w", err)
@@ -36,17 +34,8 @@ func WriteCSV(path string, rows []parser.WaitlistRow) error {
 	defer f.Close()
 
 	w := csv.NewWriter(f)
-	if err := w.Write([]string{"request_id", "dorm", "room_type", "size_sqm", "your_rank"}); err != nil {
-		return fmt.Errorf("write header: %w", err)
-	}
-	for _, row := range sorted {
-		if err := w.Write([]string{
-			row.RequestID,
-			row.Dorm,
-			row.RoomType,
-			row.Size,
-			fmt.Sprintf("%d", row.YourRank),
-		}); err != nil {
+	for _, rec := range Records(rows) {
+		if err := w.Write(rec); err != nil {
 			return fmt.Errorf("write row: %w", err)
 		}
 	}

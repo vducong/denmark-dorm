@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/koan/kkik-waitlist/internal/parser"
+	"denmark-housing-waitlist/internal/parser"
 )
 
 func testdataPath(t *testing.T, name string) string {

@@ -37,3 +37,7 @@ run-no-email: build ## Live scrape + CSV, skip email (requires config.yaml)
 dump: build ## Live scrape, save HTML to debug.html, no email (requires config.yaml)
 	@test -f $(CONFIG) || (echo "error: cp config.example.yaml $(CONFIG) and edit" >&2 && exit 1)
 	./$(BINARY) --dump-html $(DEBUG_HTML) --no-email
+
+auth-sheets: build ## One-time Google OAuth for Sheets (requires config.yaml)
+	@test -f $(CONFIG) || (echo "error: cp config.example.yaml $(CONFIG) and edit" >&2 && exit 1)
+	./$(BINARY) --auth-sheets

@@ -15,3 +15,10 @@ email:
   smtp_port: 587
   smtp_user: you@example.com
   smtp_password: your-gmail-app-password
+
+# Optional: upload results to Google Sheets (OAuth — see README)
+sheets:
+  spreadsheet_id: ""
+  sheet_name: Sheet1
+  oauth_client_file: ./client_secret.json
+  oauth_token_file: ./token.json

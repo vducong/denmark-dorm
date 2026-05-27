@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/koan/kkik-waitlist/internal/config"
+	"denmark-housing-waitlist/internal/config"
 )
 
 const (

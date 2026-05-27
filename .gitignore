@@ -5,3 +5,7 @@ kkik-waitlist
 *_kkik_waitlist.csv
 testdata/
 debug/
+
+client_secret.json
+token.json
+credentials/

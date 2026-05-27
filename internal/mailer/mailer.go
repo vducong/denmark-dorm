@@ -16,14 +16,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/koan/kkik-waitlist/internal/config"
-	"github.com/koan/kkik-waitlist/internal/export"
-	"github.com/koan/kkik-waitlist/internal/parser"
+	"denmark-housing-waitlist/internal/config"
+	"denmark-housing-waitlist/internal/export"
+	"denmark-housing-waitlist/internal/parser"
 )
 
 // SendReport emails the CSV report with a short summary.
-func SendReport(cfg *config.Config, result *parser.Result, csvPath string) error {
-	body := buildBody(result, csvPath)
+func SendReport(cfg *config.Config, result *parser.Result, csvPath, sheetURL string) error {
+	body := buildBody(result, sheetURL)
 	subject := fmt.Sprintf("KKIK waitlist report — %s", time.Now().Format("2006-01-02"))
 
 	msg, err := buildMessage(cfg, subject, body, csvPath)
@@ -81,7 +81,7 @@ func sendSMTP(cfg *config.Config, msg []byte) error {
 	return client.Quit()
 }
 
-func buildBody(result *parser.Result, csvPath string) string {
+func buildBody(result *parser.Result, sheetURL string) string {
 	var b strings.Builder
 	fmt.Fprint(&b, `<!DOCTYPE html><html><body>`)
 	fmt.Fprint(&b, `<p>Kính mợ,</p>`)
@@ -108,8 +108,12 @@ func buildBody(result *parser.Result, csvPath string) string {
 	}
 	fmt.Fprint(&b, `</p>`)
 
-	url := html.EscapeString(config.HousingURL)
-	fmt.Fprintf(&b, `<p>For more details, see <a href="%s">the KKIK housing portal</a> or the attached CSV file.</p>`, url)
+	portalURL := html.EscapeString(config.HousingURL)
+	fmt.Fprintf(&b, `<p>For more details, see <a href="%s">the KKIK housing portal</a>`, portalURL)
+	if sheetURL != "" {
+		fmt.Fprintf(&b, `, <a href="%s">the live Google Sheet</a>`, html.EscapeString(sheetURL))
+	}
+	fmt.Fprint(&b, `, or the attached CSV file.</p>`)
 	fmt.Fprint(&b, `<p>Anh Zou trân trọng chơm một cái &lt;3</p></body></html>`)
 	return b.String()
 }

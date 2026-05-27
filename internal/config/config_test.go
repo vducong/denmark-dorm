@@ -40,4 +40,38 @@ email:
 	if cfg.KKIK.TimeoutSec != 60 {
 		t.Errorf("timeout_sec = %d", cfg.KKIK.TimeoutSec)
 	}
+	if cfg.Sheets.SheetName != defaultSheetName {
+		t.Errorf("sheet_name = %q", cfg.Sheets.SheetName)
+	}
+}
+
+func TestSheetsEnabled(t *testing.T) {
+	cfg := &Config{Sheets: Sheets{SpreadsheetID: "abc"}}
+	if !cfg.SheetsEnabled() {
+		t.Fatal("expected sheets enabled")
+	}
+	if cfg.SheetURL() != "https://docs.google.com/spreadsheets/d/abc/edit" {
+		t.Errorf("url = %q", cfg.SheetURL())
+	}
+}
+
+func TestValidateSheetsUpdate_missingToken(t *testing.T) {
+	dir := t.TempDir()
+	client := filepath.Join(dir, "client_secret.json")
+	if err := os.WriteFile(client, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	token := filepath.Join(dir, "missing-token.json")
+
+	cfg := &Config{
+		Sheets: Sheets{
+			SpreadsheetID:   "sheet-id",
+			OAuthClientFile: client,
+			OAuthTokenFile:  token,
+			SheetName:       "Waitlist",
+		},
+	}
+	if err := cfg.ValidateSheetsUpdate(); err == nil {
+		t.Fatal("expected error for missing token")
+	}
 }

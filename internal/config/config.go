@@ -9,15 +9,30 @@ import (
 )
 
 const (
+	defaultSheetName       = "Sheet1"
+	defaultOAuthClientFile = "./internal/config/client_secret.json"
+	defaultOAuthTokenFile  = "./internal/config/token.json"
+)
+
+const (
 	LoginURL          = "https://www.kollegierneskontor.dk/default.aspx?func=kkikportal.login&lang=GB"
 	HousingURL        = "https://www.kollegierneskontor.dk/default.aspx?func=kkikportal.housingrequests&mid=10&topmenuid=5&lang=GB"
-	defaultConfigPath = "config.yaml"
+	defaultConfigPath = "internal/config/config.yaml"
 )
 
 // Config is the application configuration (YAML + optional env overrides).
 type Config struct {
-	KKIK  KKIK  `yaml:"kkik"`
-	Email Email `yaml:"email"`
+	KKIK   KKIK   `yaml:"kkik"`
+	Email  Email  `yaml:"email"`
+	Sheets Sheets `yaml:"sheets"`
+}
+
+// Sheets holds Google Sheets export settings (OAuth).
+type Sheets struct {
+	SpreadsheetID   string `yaml:"spreadsheet_id" env:"SHEETS_SPREADSHEET_ID"`
+	SheetName       string `yaml:"sheet_name" env:"SHEETS_SHEET_NAME"`
+	OAuthClientFile string `yaml:"oauth_client_file" env:"SHEETS_OAUTH_CLIENT_FILE"`
+	OAuthTokenFile  string `yaml:"oauth_token_file" env:"SHEETS_OAUTH_TOKEN_FILE"`
 }
 
 // KKIK holds portal login and scraper settings.
@@ -58,6 +73,25 @@ func (c *Config) applyDefaults() {
 	if c.KKIK.TimeoutSec <= 0 {
 		c.KKIK.TimeoutSec = 120
 	}
+	if c.Sheets.SheetName == "" {
+		c.Sheets.SheetName = defaultSheetName
+	}
+	if c.Sheets.OAuthClientFile == "" {
+		c.Sheets.OAuthClientFile = defaultOAuthClientFile
+	}
+	if c.Sheets.OAuthTokenFile == "" {
+		c.Sheets.OAuthTokenFile = defaultOAuthTokenFile
+	}
+}
+
+// SheetsEnabled reports whether Google Sheets upload should run.
+func (c *Config) SheetsEnabled() bool {
+	return c.Sheets.SpreadsheetID != ""
+}
+
+// SheetURL returns a browser link to the configured spreadsheet.
+func (c *Config) SheetURL() string {
+	return fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", c.Sheets.SpreadsheetID)
 }
 
 // OutputCSVPath returns the timestamped CSV output file path for this run.
@@ -77,6 +111,34 @@ func (c *Config) ValidateKKIK() error {
 	}
 	if c.KKIK.Password == "" {
 		return fmt.Errorf("kkik.password is required")
+	}
+	return nil
+}
+
+// ValidateSheetsAuth checks settings required for --auth-sheets.
+func (c *Config) ValidateSheetsAuth() error {
+	if c.Sheets.OAuthClientFile == "" {
+		return fmt.Errorf("sheets.oauth_client_file is required")
+	}
+	if _, err := os.Stat(c.Sheets.OAuthClientFile); err != nil {
+		return fmt.Errorf("sheets oauth client file %s: %w", c.Sheets.OAuthClientFile, err)
+	}
+	return nil
+}
+
+// ValidateSheetsUpdate checks settings required for uploading rows.
+func (c *Config) ValidateSheetsUpdate() error {
+	if c.Sheets.SpreadsheetID == "" {
+		return fmt.Errorf("sheets.spreadsheet_id is required")
+	}
+	if err := c.ValidateSheetsAuth(); err != nil {
+		return err
+	}
+	if c.Sheets.OAuthTokenFile == "" {
+		return fmt.Errorf("sheets.oauth_token_file is required")
+	}
+	if _, err := os.Stat(c.Sheets.OAuthTokenFile); err != nil {
+		return fmt.Errorf("sheets oauth token missing at %s (run with --auth-sheets)", c.Sheets.OAuthTokenFile)
 	}
 	return nil
 }
