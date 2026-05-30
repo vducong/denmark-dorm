@@ -15,12 +15,12 @@ import (
 )
 
 const (
-	sheetColumnCount = 5
+	sheetColumnCount = 6
 	headerRowIndex   = 1 // 0-based; row 0 is "Last updated at" metadata
 )
 
 // Update replaces header + data rows on the configured tab.
-func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) (string, error) {
+func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, prevRanks map[string]int) (string, error) {
 	httpClient, err := client(ctx, cfg)
 	if err != nil {
 		return "", err
@@ -31,7 +31,7 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) 
 		return "", fmt.Errorf("create sheets client: %w", err)
 	}
 
-	records := export.Records(rows)
+	records := export.Records(rows, prevRanks)
 	if len(records) == 0 {
 		return "", fmt.Errorf("no rows to write")
 	}
@@ -47,7 +47,7 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow) 
 		return "", fmt.Errorf("clear sheet: %w", err)
 	}
 
-	updateRange := sheetRange(cfg.Sheets.SheetName, fmt.Sprintf("A1:E%d", len(values)))
+	updateRange := sheetRange(cfg.Sheets.SheetName, fmt.Sprintf("A1:F%d", len(values)))
 	_, err = svc.Spreadsheets.Values.Update(
 		cfg.Sheets.SpreadsheetID,
 		updateRange,

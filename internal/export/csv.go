@@ -26,7 +26,7 @@ func SortRows(rows []parser.WaitlistRow) []parser.WaitlistRow {
 }
 
 // WriteCSV writes sorted rows to path with a stable header.
-func WriteCSV(path string, rows []parser.WaitlistRow) error {
+func WriteCSV(path string, rows []parser.WaitlistRow, prevRanks map[string]int) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create csv: %w", err)
@@ -34,7 +34,7 @@ func WriteCSV(path string, rows []parser.WaitlistRow) error {
 	defer f.Close()
 
 	w := csv.NewWriter(f)
-	for _, rec := range Records(rows) {
+	for _, rec := range Records(rows, prevRanks) {
 		if err := w.Write(rec); err != nil {
 			return fmt.Errorf("write row: %w", err)
 		}

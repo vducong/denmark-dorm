@@ -12,12 +12,13 @@ import (
 func TestRecordsToValues_includesHeaderRow(t *testing.T) {
 	records := export.Records([]parser.WaitlistRow{
 		{RequestID: "1", Dorm: "D", YourRank: 3},
-	})
+	}, nil)
 	values := recordsToValues(records)
 	if len(values) != 2 {
 		t.Fatalf("len = %d, want 2 (header + 1 row)", len(values))
 	}
-	if !reflect.DeepEqual(values[0], []interface{}{"request_id", "dorm", "room_type", "size_sqm", "your_rank"}) {
+	wantHeader := []interface{}{"request_id", "dorm", "room_type", "size_sqm", "your_rank", "diff"}
+	if !reflect.DeepEqual(values[0], wantHeader) {
 		t.Errorf("header row = %v", values[0])
 	}
 }
@@ -25,7 +26,7 @@ func TestRecordsToValues_includesHeaderRow(t *testing.T) {
 func TestSheetValues_lastUpdatedMetadata(t *testing.T) {
 	records := export.Records([]parser.WaitlistRow{
 		{RequestID: "1", Dorm: "D", YourRank: 3},
-	})
+	}, nil)
 	updatedAt := time.Date(2026, 5, 26, 15, 4, 5, 0, time.UTC)
 	values := sheetValues(records, updatedAt)
 

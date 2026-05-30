@@ -68,8 +68,14 @@ func run() int {
 	}
 	slog.Info("parsed rows", "count", len(result.Rows))
 
+	prevRanks, err := export.LoadPrevRanks(".")
+	if err != nil {
+		slog.Warn("load prev ranks", "err", err)
+		prevRanks = map[string]int{}
+	}
+
 	csvPath := cfg.OutputCSVPath()
-	if err := export.WriteCSV(csvPath, result.Rows); err != nil {
+	if err := export.WriteCSV(csvPath, result.Rows, prevRanks); err != nil {
 		slog.Error("write csv", "path", csvPath, "err", err)
 		return 1
 	}
@@ -95,7 +101,7 @@ func run() int {
 			slog.Error("invalid sheets config", "err", err)
 			return 1
 		}
-		sheetURL, err = sheets.Update(context.Background(), cfg, result.Rows)
+		sheetURL, err = sheets.Update(context.Background(), cfg, result.Rows, prevRanks)
 		if err != nil {
 			slog.Error("update sheet", "err", err)
 			return 1
