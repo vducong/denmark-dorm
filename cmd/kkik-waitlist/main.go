@@ -47,6 +47,7 @@ func run() int {
 		return 1
 	}
 
+	slog.Info("scraping...")
 	s := scraper.New(cfg)
 	html, err := s.FetchHTML(context.Background())
 	if err != nil {
@@ -61,6 +62,7 @@ func run() int {
 		slog.Info("saved html", "path", *dumpHTML)
 	}
 
+	slog.Info("parsing...")
 	result, err := parser.ParseHTML(html)
 	if err != nil {
 		slog.Error("parse", "err", err)
@@ -74,6 +76,7 @@ func run() int {
 		prevRanks = map[string]int{}
 	}
 
+	slog.Info("writing CSV...")
 	csvPath := cfg.OutputCSVPath()
 	if err := export.WriteCSV(csvPath, result.Rows, prevRanks); err != nil {
 		slog.Error("write csv", "path", csvPath, "err", err)
@@ -84,6 +87,7 @@ func run() int {
 
 	var sheetURL string
 	if cfg.StepSheetEnabled() {
+		slog.Info("updating sheet...")
 		if *authSheets {
 			if err := cfg.ValidateSheetsAuth(); err != nil {
 				slog.Error("invalid sheets config", "err", err)
@@ -112,10 +116,13 @@ func run() int {
 	if !cfg.StepEmailEnabled() {
 		return 0
 	}
+	slog.Info("validating SMTP...")
 	if err := cfg.ValidateSMTP(); err != nil {
 		slog.Error("invalid smtp config", "err", err)
 		return 1
 	}
+
+	slog.Info("sending email...")
 	if err := mailer.SendReport(cfg, result, csvPath, sheetURL); err != nil {
 		slog.Error("send email", "err", err)
 		return 1
