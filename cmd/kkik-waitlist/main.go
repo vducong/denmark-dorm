@@ -105,7 +105,7 @@ func run() int {
 			slog.Error("invalid sheets config", "err", err)
 			return 1
 		}
-		sheetURL, err = sheets.Update(context.Background(), cfg, result.Rows, prevRanks)
+		sheetURL, err = sheets.Update(context.Background(), cfg, result.Rows, ".")
 		if err != nil {
 			slog.Error("update sheet", "err", err)
 			return 1

@@ -14,13 +14,10 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const (
-	sheetColumnCount = 6
-	headerRowIndex   = 1 // 0-based; row 0 is "Last updated at" metadata
-)
+const headerRowIndex = 1 // 0-based; row 0 is "Last updated at" metadata
 
-// Update replaces header + data rows on the configured tab.
-func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, prevRanks map[string]int) (string, error) {
+// Update merges scrape data into the configured tab using time-series ddmmyy columns.
+func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, csvDir string) (string, error) {
 	httpClient, err := client(ctx, cfg)
 	if err != nil {
 		return "", err
@@ -31,23 +28,31 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, 
 		return "", fmt.Errorf("create sheets client: %w", err)
 	}
 
-	records := export.Records(rows, prevRanks)
-	if len(records) == 0 {
-		return "", fmt.Errorf("no rows to write")
+	snapshots, err := export.LoadDailySnapshots(csvDir)
+	if err != nil {
+		return "", err
 	}
-	values := sheetValues(records, time.Now())
+
+	readRange := sheetRange(cfg.Sheets.SheetName, "A:ZZ")
+	resp, err := svc.Spreadsheets.Values.Get(cfg.Sheets.SpreadsheetID, readRange).Context(ctx).Do()
+	if err != nil {
+		return "", fmt.Errorf("read sheet: %w", err)
+	}
+
+	now := time.Now()
+	values, err := BuildMatrix(rows, snapshots, resp.Values, now)
+	if err != nil {
+		return "", err
+	}
 
 	sheetID, err := sheetIDByName(svc, cfg.Sheets.SpreadsheetID, cfg.Sheets.SheetName)
 	if err != nil {
 		return "", err
 	}
 
-	clearRange := sheetRange(cfg.Sheets.SheetName, "A:Z")
-	if _, err := svc.Spreadsheets.Values.Clear(cfg.Sheets.SpreadsheetID, clearRange, &sheets.ClearValuesRequest{}).Context(ctx).Do(); err != nil {
-		return "", fmt.Errorf("clear sheet: %w", err)
-	}
-
-	updateRange := sheetRange(cfg.Sheets.SheetName, fmt.Sprintf("A1:F%d", len(values)))
+	colCount := matrixWidth(values)
+	lastCol := columnLetter(colCount)
+	updateRange := sheetRange(cfg.Sheets.SheetName, fmt.Sprintf("A1:%s%d", lastCol, len(values)))
 	_, err = svc.Spreadsheets.Values.Update(
 		cfg.Sheets.SpreadsheetID,
 		updateRange,
@@ -60,14 +65,14 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, 
 		return "", fmt.Errorf("update sheet: %w", err)
 	}
 
-	if err := formatSheet(ctx, svc, cfg.Sheets.SpreadsheetID, sheetID); err != nil {
+	if err := formatSheet(ctx, svc, cfg.Sheets.SpreadsheetID, sheetID, colCount); err != nil {
 		return "", err
 	}
 
 	return cfg.SheetURL(), nil
 }
 
-func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string, sheetID int64) error {
+func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string, sheetID int64, columnCount int) error {
 	_, err := svc.Spreadsheets.BatchUpdate(spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
 		Requests: []*sheets.Request{
 			{
@@ -77,7 +82,7 @@ func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string,
 						StartRowIndex:    headerRowIndex,
 						EndRowIndex:      headerRowIndex + 1,
 						StartColumnIndex: 0,
-						EndColumnIndex:   sheetColumnCount,
+						EndColumnIndex:   int64(columnCount),
 					},
 					Cell: &sheets.CellData{
 						UserEnteredFormat: &sheets.CellFormat{
@@ -104,7 +109,7 @@ func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string,
 						SheetId:    sheetID,
 						Dimension:  "COLUMNS",
 						StartIndex: 0,
-						EndIndex:   sheetColumnCount,
+						EndIndex:   int64(columnCount),
 					},
 				},
 			},
@@ -135,25 +140,31 @@ func sheetIDByName(svc *sheets.Service, spreadsheetID, sheetName string) (int64,
 	return 0, fmt.Errorf("sheet tab %q not found (available: %s)", sheetName, strings.Join(names, ", "))
 }
 
-// sheetValues prepends a metadata row: A1="Last updated at", B1=<timestamp>.
-func sheetValues(records [][]string, updatedAt time.Time) [][]any {
-	data := recordsToValues(records)
-	out := make([][]any, 0, len(data)+1)
-	out = append(out, []any{"Last updated at", updatedAt.Format(time.RFC3339)})
-	out = append(out, data...)
-	return out
+func matrixWidth(values [][]any) int {
+	max := 0
+	for _, row := range values {
+		if len(row) > max {
+			max = len(row)
+		}
+	}
+	return max
 }
 
-func recordsToValues(records [][]string) [][]any {
-	out := make([][]any, len(records))
-	for i, rec := range records {
-		row := make([]any, len(rec))
-		for j, v := range rec {
-			row[j] = v
-		}
-		out[i] = row
+func columnLetter(n int) string {
+	if n <= 0 {
+		return "A"
 	}
-	return out
+	var b strings.Builder
+	for n > 0 {
+		n--
+		b.WriteByte(byte('A' + n%26))
+		n /= 26
+	}
+	runes := []rune(b.String())
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
 }
 
 func sheetRange(sheetName, cells string) string {

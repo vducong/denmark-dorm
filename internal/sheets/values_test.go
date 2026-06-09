@@ -1,42 +1,26 @@
 package sheets
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
-	"denmark-housing-waitlist/internal/export"
 	"denmark-housing-waitlist/internal/parser"
 )
 
-func TestRecordsToValues_includesHeaderRow(t *testing.T) {
-	records := export.Records([]parser.WaitlistRow{
+func TestBuildMatrix_metadataRow(t *testing.T) {
+	today := time.Date(2026, 5, 26, 15, 4, 5, 0, time.UTC)
+	rows := []parser.WaitlistRow{
 		{RequestID: "1", Dorm: "D", YourRank: 3},
-	}, nil)
-	values := recordsToValues(records)
-	if len(values) != 2 {
-		t.Fatalf("len = %d, want 2 (header + 1 row)", len(values))
 	}
-	wantHeader := []interface{}{"request_id", "dorm", "room_type", "size_sqm", "your_rank", "diff"}
-	if !reflect.DeepEqual(values[0], wantHeader) {
-		t.Errorf("header row = %v", values[0])
-	}
-}
 
-func TestSheetValues_lastUpdatedMetadata(t *testing.T) {
-	records := export.Records([]parser.WaitlistRow{
-		{RequestID: "1", Dorm: "D", YourRank: 3},
-	}, nil)
-	updatedAt := time.Date(2026, 5, 26, 15, 4, 5, 0, time.UTC)
-	values := sheetValues(records, updatedAt)
-
-	if len(values) != 3 {
-		t.Fatalf("len = %d, want 3 (meta + header + 1 row)", len(values))
+	matrix, err := BuildMatrix(rows, nil, nil, today)
+	if err != nil {
+		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	if !reflect.DeepEqual(values[0], []interface{}{"Last updated at", "2026-05-26T15:04:05Z"}) {
-		t.Errorf("meta row = %v", values[0])
+	if matrix[0][0] != metaLabel || matrix[0][1] != "2026-05-26T15:04:05Z" {
+		t.Errorf("meta row = %v", matrix[0])
 	}
-	if values[1][0] != "request_id" {
-		t.Errorf("header row = %v", values[1])
+	if matrix[1][0] != "request_id" {
+		t.Errorf("header row = %v", matrix[1])
 	}
 }

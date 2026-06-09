@@ -33,8 +33,8 @@ func TestRecords_diff(t *testing.T) {
 	}
 	prev := map[string]int{"a": 15, "b": 25}
 	recs := Records(rows, prev)
-	if recs[1][5] != "5" {
-		t.Errorf("improved row diff = %q, want 5", recs[1][5])
+	if recs[1][5] != "+5" {
+		t.Errorf("improved row diff = %q, want +5", recs[1][5])
 	}
 	if recs[2][5] != "-5" {
 		t.Errorf("worsened row diff = %q, want -5", recs[2][5])
