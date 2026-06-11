@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 )
 
-// LoadPrevRanks reads request_id → your_rank from the latest *_kkik_waitlist.csv in dir.
-// Returns an empty map when no previous files exist.
-func LoadPrevRanks(dir string) (map[string]int, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*_kkik_waitlist.csv"))
+// LoadPrevRanks reads request_id → RankOrder from the latest *_waitlist.csv in
+// dir, converting each your_rank display value via rankOrder. Returns an empty
+// map when no previous files exist.
+func LoadPrevRanks(dir string, rankOrder func(string) (int, bool)) (map[string]int, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "*_waitlist.csv"))
 	if err != nil {
 		return nil, fmt.Errorf("glob prev csv: %w", err)
 	}
@@ -61,11 +61,11 @@ func LoadPrevRanks(dir string) (map[string]int, error) {
 		if id == "" {
 			continue
 		}
-		rank, err := strconv.Atoi(rec[rankIdx])
-		if err != nil {
-			return nil, fmt.Errorf("prev csv %s: invalid rank for %s: %w", latest, id, err)
+		order, ok := rankOrder(rec[rankIdx])
+		if !ok {
+			continue
 		}
-		out[id] = rank
+		out[id] = order
 	}
 	return out, nil
 }

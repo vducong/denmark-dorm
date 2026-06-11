@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/model"
 )
 
 func TestBuildMatrix_metadataRow(t *testing.T) {
 	today := time.Date(2026, 5, 26, 15, 4, 5, 0, time.UTC)
-	rows := []parser.WaitlistRow{
-		{RequestID: "1", Dorm: "D", YourRank: 3},
+	rows := []model.WaitlistRow{
+		{RequestID: "1", Dorm: "D", RankDisplay: "3", RankOrder: 3},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, nil, today)
+	matrix, err := BuildMatrix(rows, nil, nil, today, numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}

@@ -3,13 +3,20 @@ package export
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
+// numericOrder is a stand-in for a source's RankOrder over numeric ranks.
+func numericOrder(s string) (int, bool) {
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
 func TestLoadPrevRanks_latestFile(t *testing.T) {
 	dir := t.TempDir()
-	older := filepath.Join(dir, "202605261338_kkik_waitlist.csv")
-	newer := filepath.Join(dir, "202605300134_kkik_waitlist.csv")
+	older := filepath.Join(dir, "202605261338_waitlist.csv")
+	newer := filepath.Join(dir, "202605300134_waitlist.csv")
 	if err := os.WriteFile(older, []byte("request_id,dorm,room_type,size_sqm,your_rank\n1,A,,,100\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +24,7 @@ func TestLoadPrevRanks_latestFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ranks, err := LoadPrevRanks(dir)
+	ranks, err := LoadPrevRanks(dir, numericOrder)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +40,7 @@ func TestLoadPrevRanks_latestFile(t *testing.T) {
 }
 
 func TestLoadPrevRanks_noFiles(t *testing.T) {
-	ranks, err := LoadPrevRanks(t.TempDir())
+	ranks, err := LoadPrevRanks(t.TempDir(), numericOrder)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-module denmark-housing-waitlist
+module housing-waitlist
 
 go 1.26.1
 

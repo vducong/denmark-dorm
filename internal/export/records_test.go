@@ -3,13 +3,13 @@ package export
 import (
 	"testing"
 
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/model"
 )
 
 func TestRecords_sortedByRank(t *testing.T) {
-	rows := []parser.WaitlistRow{
-		{RequestID: "b", Dorm: "B", YourRank: 20},
-		{RequestID: "a", Dorm: "A", YourRank: 5},
+	rows := []model.WaitlistRow{
+		{RequestID: "b", Dorm: "B", RankDisplay: "20", RankOrder: 20},
+		{RequestID: "a", Dorm: "A", RankDisplay: "5", RankOrder: 5},
 	}
 	recs := Records(rows, nil)
 	if len(recs) != 3 {
@@ -27,9 +27,9 @@ func TestRecords_sortedByRank(t *testing.T) {
 }
 
 func TestRecords_diff(t *testing.T) {
-	rows := []parser.WaitlistRow{
-		{RequestID: "a", Dorm: "A", YourRank: 10},
-		{RequestID: "b", Dorm: "B", YourRank: 30},
+	rows := []model.WaitlistRow{
+		{RequestID: "a", Dorm: "A", RankDisplay: "10", RankOrder: 10},
+		{RequestID: "b", Dorm: "B", RankDisplay: "30", RankOrder: 30},
 	}
 	prev := map[string]int{"a": 15, "b": 25}
 	recs := Records(rows, prev)
@@ -42,7 +42,7 @@ func TestRecords_diff(t *testing.T) {
 }
 
 func TestRecords_diff_newListing(t *testing.T) {
-	rows := []parser.WaitlistRow{{RequestID: "new", Dorm: "D", YourRank: 1}}
+	rows := []model.WaitlistRow{{RequestID: "new", Dorm: "D", RankDisplay: "1", RankOrder: 1}}
 	prev := map[string]int{"old": 99}
 	recs := Records(rows, prev)
 	if recs[1][5] != "" {

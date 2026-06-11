@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"denmark-housing-waitlist/internal/export"
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/export"
+	"housing-waitlist/internal/model"
 )
 
 var baseHeader = []string{"request_id", "dorm", "room_type", "size_sqm"}
@@ -26,15 +26,18 @@ type rowInfo struct {
 	hasToday  bool
 }
 
-// BuildMatrix merges scrape data, CSV snapshots, and existing sheet values into sheet rows.
+// BuildMatrix merges scrape data, CSV snapshots, and existing sheet values into
+// sheet rows. rankOrder projects display ranks onto a sortable scale for the
+// latest_diff column, so numeric and letter ranks both diff correctly.
 func BuildMatrix(
-	rows []parser.WaitlistRow,
+	rows []model.WaitlistRow,
 	snapshots []export.DailySnapshot,
 	existing [][]any,
 	today time.Time,
+	rankOrder func(string) (int, bool),
 ) ([][]any, error) {
 	todayHeader := export.DateHeader(today)
-	scrapeByID := make(map[string]parser.WaitlistRow, len(rows))
+	scrapeByID := make(map[string]model.WaitlistRow, len(rows))
 	for _, row := range rows {
 		scrapeByID[row.RequestID] = row
 	}
@@ -92,7 +95,7 @@ func BuildMatrix(
 		for _, dh := range dateHeaders {
 			rankCells[dh] = rankForDate(dh, info.requestID, todayHeader, scrapeByID, snapshotByHeader, existingSheet.ranks)
 		}
-		diff := sheetDiff(info.requestID, todayHeader, dateHeaders, rankCells)
+		diff := sheetDiff(todayHeader, dateHeaders, rankCells, rankOrder)
 
 		row := make([]any, len(header))
 		row[0] = info.requestID
@@ -228,7 +231,7 @@ func sortDateHeaders(headers []string) {
 }
 
 func collectRequestIDs(
-	scrape map[string]parser.WaitlistRow,
+	scrape map[string]model.WaitlistRow,
 	snapshots []export.DailySnapshot,
 	existingRows map[string]map[string]string,
 ) []string {
@@ -254,7 +257,7 @@ func collectRequestIDs(
 
 func buildRowInfo(
 	id string,
-	scrape map[string]parser.WaitlistRow,
+	scrape map[string]model.WaitlistRow,
 	snapshots []export.DailySnapshot,
 	existingRows map[string]map[string]string,
 ) rowInfo {
@@ -264,7 +267,7 @@ func buildRowInfo(
 			dorm:      row.Dorm,
 			roomType:  row.RoomType,
 			size:      row.Size,
-			todayRank: row.YourRank,
+			todayRank: row.RankOrder,
 			hasToday:  true,
 		}
 	}
@@ -294,18 +297,18 @@ func buildRowInfo(
 
 func rankForDate(
 	dateHeader, requestID, todayHeader string,
-	scrape map[string]parser.WaitlistRow,
+	scrape map[string]model.WaitlistRow,
 	snapshots map[string]export.DailySnapshot,
 	existingRanks map[string]map[string]string,
 ) string {
 	if dateHeader == todayHeader {
 		if row, ok := scrape[requestID]; ok {
-			return strconv.Itoa(row.YourRank)
+			return row.RankDisplay
 		}
 	}
 	if snap, ok := snapshots[dateHeader]; ok {
 		if rank, ok := snap.Ranks[requestID]; ok {
-			return strconv.Itoa(rank)
+			return rank
 		}
 	}
 	if byID, ok := existingRanks[requestID]; ok {
@@ -316,13 +319,13 @@ func rankForDate(
 	return ""
 }
 
-func sheetDiff(requestID, todayHeader string, dateHeaders []string, rankCells map[string]string) string {
+func sheetDiff(todayHeader string, dateHeaders []string, rankCells map[string]string, rankOrder func(string) (int, bool)) string {
 	todayStr, ok := rankCells[todayHeader]
 	if !ok || todayStr == "" {
 		return ""
 	}
-	todayRank, err := strconv.Atoi(todayStr)
-	if err != nil {
+	todayOrder, ok := rankOrder(todayStr)
+	if !ok {
 		return ""
 	}
 
@@ -337,18 +340,18 @@ func sheetDiff(requestID, todayHeader string, dateHeaders []string, rankCells ma
 		return ""
 	}
 
-	var prevRank int
+	var prevOrder int
 	found := false
 	for i := todayIdx - 1; i >= 0; i-- {
 		prevStr := rankCells[dateHeaders[i]]
 		if prevStr == "" {
 			continue
 		}
-		r, err := strconv.Atoi(prevStr)
-		if err != nil {
+		o, ok := rankOrder(prevStr)
+		if !ok {
 			continue
 		}
-		prevRank = r
+		prevOrder = o
 		found = true
 		break
 	}
@@ -356,11 +359,11 @@ func sheetDiff(requestID, todayHeader string, dateHeaders []string, rankCells ma
 		return ""
 	}
 
-	if prevRank > todayRank {
-		return "+" + strconv.Itoa(prevRank-todayRank)
+	if prevOrder > todayOrder {
+		return "+" + strconv.Itoa(prevOrder-todayOrder)
 	}
-	if prevRank < todayRank {
-		return "-" + strconv.Itoa(todayRank-prevRank)
+	if prevOrder < todayOrder {
+		return "-" + strconv.Itoa(todayOrder-prevOrder)
 	}
 	return "-"
 }

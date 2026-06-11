@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"denmark-housing-waitlist/internal/config"
-	"denmark-housing-waitlist/internal/export"
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/config"
+	"housing-waitlist/internal/export"
+	"housing-waitlist/internal/model"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -16,9 +16,18 @@ import (
 
 const headerRowIndex = 1 // 0-based; row 0 is "Last updated at" metadata
 
-// Update merges scrape data into the configured tab using time-series ddmmyy columns.
-func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, csvDir string) (string, error) {
-	httpClient, err := client(ctx, cfg)
+// Update merges scrape data into the target tab using time-series ddmmyy
+// columns. csvDir is the source's data dir scanned for historical snapshots;
+// rankOrder projects display ranks for the latest_diff column.
+func Update(
+	ctx context.Context,
+	google config.Google,
+	target config.SheetTarget,
+	rows []model.WaitlistRow,
+	csvDir string,
+	rankOrder func(string) (int, bool),
+) (string, error) {
+	httpClient, err := client(ctx, google)
 	if err != nil {
 		return "", err
 	}
@@ -33,28 +42,28 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, 
 		return "", err
 	}
 
-	readRange := sheetRange(cfg.Sheets.SheetName, "A:ZZ")
-	resp, err := svc.Spreadsheets.Values.Get(cfg.Sheets.SpreadsheetID, readRange).Context(ctx).Do()
+	readRange := sheetRange(target.SheetName, "A:ZZ")
+	resp, err := svc.Spreadsheets.Values.Get(target.SpreadsheetID, readRange).Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("read sheet: %w", err)
 	}
 
 	now := time.Now()
-	values, err := BuildMatrix(rows, snapshots, resp.Values, now)
+	values, err := BuildMatrix(rows, snapshots, resp.Values, now, rankOrder)
 	if err != nil {
 		return "", err
 	}
 
-	sheetID, err := sheetIDByName(svc, cfg.Sheets.SpreadsheetID, cfg.Sheets.SheetName)
+	sheetID, err := sheetIDByName(svc, target.SpreadsheetID, target.SheetName)
 	if err != nil {
 		return "", err
 	}
 
 	colCount := matrixWidth(values)
 	lastCol := columnLetter(colCount)
-	updateRange := sheetRange(cfg.Sheets.SheetName, fmt.Sprintf("A1:%s%d", lastCol, len(values)))
+	updateRange := sheetRange(target.SheetName, fmt.Sprintf("A1:%s%d", lastCol, len(values)))
 	_, err = svc.Spreadsheets.Values.Update(
-		cfg.Sheets.SpreadsheetID,
+		target.SpreadsheetID,
 		updateRange,
 		&sheets.ValueRange{
 			MajorDimension: "ROWS",
@@ -65,11 +74,11 @@ func Update(ctx context.Context, cfg *config.Config, rows []parser.WaitlistRow, 
 		return "", fmt.Errorf("update sheet: %w", err)
 	}
 
-	if err := formatSheet(ctx, svc, cfg.Sheets.SpreadsheetID, sheetID, colCount); err != nil {
+	if err := formatSheet(ctx, svc, target.SpreadsheetID, sheetID, colCount); err != nil {
 		return "", err
 	}
 
-	return cfg.SheetURL(), nil
+	return config.SheetURL(target.SpreadsheetID), nil
 }
 
 func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string, sheetID int64, columnCount int) error {

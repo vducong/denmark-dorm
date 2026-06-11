@@ -4,18 +4,19 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/model"
 )
 
-// SortRows returns rows sorted by your_rank, then dorm, then room_type.
-func SortRows(rows []parser.WaitlistRow) []parser.WaitlistRow {
-	out := make([]parser.WaitlistRow, len(rows))
+// SortRows returns rows sorted by rank order, then dorm, then room_type.
+func SortRows(rows []model.WaitlistRow) []model.WaitlistRow {
+	out := make([]model.WaitlistRow, len(rows))
 	copy(out, rows)
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].YourRank != out[j].YourRank {
-			return out[i].YourRank < out[j].YourRank
+		if out[i].RankOrder != out[j].RankOrder {
+			return out[i].RankOrder < out[j].RankOrder
 		}
 		if out[i].Dorm != out[j].Dorm {
 			return out[i].Dorm < out[j].Dorm
@@ -25,8 +26,15 @@ func SortRows(rows []parser.WaitlistRow) []parser.WaitlistRow {
 	return out
 }
 
-// WriteCSV writes sorted rows to path with a stable header.
-func WriteCSV(path string, rows []parser.WaitlistRow, prevRanks map[string]int) error {
+// WriteCSV writes sorted rows to path with a stable header, creating the parent
+// directory if needed.
+func WriteCSV(path string, rows []model.WaitlistRow, prevOrders map[string]int) error {
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create csv dir: %w", err)
+		}
+	}
+
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create csv: %w", err)
@@ -34,7 +42,7 @@ func WriteCSV(path string, rows []parser.WaitlistRow, prevRanks map[string]int) 
 	defer f.Close()
 
 	w := csv.NewWriter(f)
-	for _, rec := range Records(rows, prevRanks) {
+	for _, rec := range Records(rows, prevOrders) {
 		if err := w.Write(rec); err != nil {
 			return fmt.Errorf("write row: %w", err)
 		}

@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 
-	"denmark-housing-waitlist/internal/config"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/sheets/v4"
+	"housing-waitlist/internal/config"
 )
 
 // Loopback redirect for Desktop OAuth clients (no redirect URIs in Cloud Console).
@@ -32,15 +32,15 @@ On "Google hasn't verified this app": Advanced → Go to <app name> (unsafe)`)
 }
 
 // Authenticate runs the one-time OAuth browser flow and writes the token file.
-func Authenticate(ctx context.Context, cfg *config.Config) error {
-	oauthCfg, err := oauthConfig(cfg)
+func Authenticate(ctx context.Context, gcfg config.Google) error {
+	oauthCfg, err := oauthConfig(gcfg)
 	if err != nil {
 		return err
 	}
 
 	printOAuthSetupChecklist()
 
-	state := "kkik-waitlist"
+	state := "housing-waitlist"
 	authURL := oauthCfg.AuthCodeURL(state, oauth2.AccessTypeOffline)
 
 	codeCh := make(chan string, 1)
@@ -86,18 +86,18 @@ func Authenticate(ctx context.Context, cfg *config.Config) error {
 		if err != nil {
 			return fmt.Errorf("oauth exchange: %w", err)
 		}
-		if err := saveToken(cfg.Sheets.OAuthTokenFile, tok); err != nil {
+		if err := saveToken(gcfg.OAuthTokenFile, tok); err != nil {
 			return err
 		}
-		fmt.Println("Saved token to", cfg.Sheets.OAuthTokenFile)
+		fmt.Println("Saved token to", gcfg.OAuthTokenFile)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func oauthConfig(cfg *config.Config) (*oauth2.Config, error) {
-	b, err := os.ReadFile(cfg.Sheets.OAuthClientFile)
+func oauthConfig(gcfg config.Google) (*oauth2.Config, error) {
+	b, err := os.ReadFile(gcfg.OAuthClientFile)
 	if err != nil {
 		return nil, fmt.Errorf("read oauth client file: %w", err)
 	}
@@ -109,12 +109,12 @@ func oauthConfig(cfg *config.Config) (*oauth2.Config, error) {
 	return oauthCfg, nil
 }
 
-func client(ctx context.Context, cfg *config.Config) (*http.Client, error) {
-	oauthCfg, err := oauthConfig(cfg)
+func client(ctx context.Context, gcfg config.Google) (*http.Client, error) {
+	oauthCfg, err := oauthConfig(gcfg)
 	if err != nil {
 		return nil, err
 	}
-	tok, err := loadToken(cfg.Sheets.OAuthTokenFile)
+	tok, err := loadToken(gcfg.OAuthTokenFile)
 	if err != nil {
 		return nil, err
 	}

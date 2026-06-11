@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -12,54 +13,99 @@ const (
 	defaultSheetName       = "Sheet1"
 	defaultOAuthClientFile = "./internal/config/client_secret.json"
 	defaultOAuthTokenFile  = "./internal/config/token.json"
-)
-
-const (
-	LoginURL          = "https://www.kollegierneskontor.dk/default.aspx?func=kkikportal.login&lang=GB"
-	HousingURL        = "https://www.kollegierneskontor.dk/default.aspx?func=kkikportal.housingrequests&mid=10&topmenuid=5&lang=GB"
-	defaultConfigPath = "internal/config/config.yaml"
+	defaultConfigPath      = "internal/config/config.yaml"
+	defaultTimeoutSec      = 120
 )
 
 // Config is the application configuration (YAML + optional env overrides).
+//
+// SMTP and Google are shared by every source (one mail sender, one Google
+// identity); Sources holds the per-source settings.
 type Config struct {
-	KKIK   KKIK   `yaml:"kkik"`
-	Email  Email  `yaml:"email"`
-	Sheets Sheets `yaml:"sheets"`
-	Steps  Steps  `yaml:"steps"`
+	SMTP    SMTP    `yaml:"smtp"`
+	Google  Google  `yaml:"google"`
+	Sources Sources `yaml:"sources"`
 }
 
-// KKIK holds portal login and scraper settings.
-type KKIK struct {
-	Email      string `yaml:"email" env:"KKIK_EMAIL"`
-	Password   string `yaml:"password" env:"KKIK_PASSWORD"`
-	Headless   bool   `yaml:"headless" env:"KKIK_HEADLESS" env-default:"true"`
-	TimeoutSec int    `yaml:"timeout_sec" env:"KKIK_TIMEOUT_SEC" env-default:"120"`
-	DebugDir   string `yaml:"debug_dir" env:"KKIK_DEBUG_DIR"`
+// SMTP holds the shared mail transport and sender identity.
+type SMTP struct {
+	Host     string `yaml:"host"     env:"SMTP_HOST"`
+	Port     int    `yaml:"port"     env:"SMTP_PORT" env-default:"587"`
+	User     string `yaml:"user"     env:"SMTP_USER"`
+	Password string `yaml:"password" env:"SMTP_PASSWORD"`
+	From     string `yaml:"from"     env:"SMTP_FROM"`
 }
 
-// Email holds SMTP report delivery settings.
-type Email struct {
-	To           string `yaml:"to" env:"EMAIL_TO"`
-	From         string `yaml:"from" env:"EMAIL_FROM"`
-	SMTPHost     string `yaml:"smtp_host" env:"SMTP_HOST"`
-	SMTPPort     int    `yaml:"smtp_port" env:"SMTP_PORT" env-default:"587"`
-	SMTPUser     string `yaml:"smtp_user" env:"SMTP_USER"`
-	SMTPPassword string `yaml:"smtp_password" env:"SMTP_PASSWORD"`
+// Google holds the shared OAuth identity used for Google Sheets.
+type Google struct {
+	OAuthClientFile string `yaml:"oauth_client_file" env:"GOOGLE_OAUTH_CLIENT_FILE"`
+	OAuthTokenFile  string `yaml:"oauth_token_file"  env:"GOOGLE_OAUTH_TOKEN_FILE"`
 }
 
-// Sheets holds Google Sheets export settings (OAuth).
-type Sheets struct {
-	SpreadsheetID   string `yaml:"spreadsheet_id" env:"SHEETS_SPREADSHEET_ID"`
-	SheetName       string `yaml:"sheet_name" env:"SHEETS_SHEET_NAME"`
-	OAuthClientFile string `yaml:"oauth_client_file" env:"SHEETS_OAUTH_CLIENT_FILE"`
-	OAuthTokenFile  string `yaml:"oauth_token_file" env:"SHEETS_OAUTH_TOKEN_FILE"`
+// Sources holds one block per registered source. Adding a source adds a field
+// here plus a case in Source().
+type Sources struct {
+	KKIK KKIKConfig `yaml:"kkik"`
 }
 
-// Steps toggles pipeline phases (crawl+CSV, email, sheet update).
+// KKIKConfig holds the KKIK (kollegierneskontor.dk) source settings.
+type KKIKConfig struct {
+	Enabled bool        `yaml:"enabled"`
+	Steps   Steps       `yaml:"steps"`
+	Login   Credentials `yaml:"login"`
+	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to
+	// true. A plain bool with env-default:"true" would override a real false,
+	// since false is indistinguishable from the zero value.
+	Headless   *bool       `yaml:"headless"`
+	TimeoutSec int         `yaml:"timeout_sec" env:"KKIK_TIMEOUT_SEC" env-default:"120"`
+	DebugDir   string      `yaml:"debug_dir"   env:"KKIK_DEBUG_DIR"`
+	Sheet      SheetTarget `yaml:"sheet"`
+	Email      EmailTarget `yaml:"email"`
+	DataDir    string      `yaml:"data_dir"`
+}
+
+// Credentials holds a source's login. Env tags are source-specific, so a new
+// source declares its own credentials type.
+type Credentials struct {
+	Email    string `yaml:"email"    env:"KKIK_EMAIL"`
+	Password string `yaml:"password" env:"KKIK_PASSWORD"`
+}
+
+// Steps toggles a source's optional pipeline phases. Crawl (fetch + CSV) always
+// runs; email and sheet default to true when the block is omitted.
 type Steps struct {
-	Crawl bool `yaml:"crawl" env:"STEPS_CRAWL"`
-	Email bool `yaml:"email" env:"STEPS_EMAIL"`
-	Sheet bool `yaml:"sheet" env:"STEPS_SHEET"`
+	Email *bool `yaml:"email"`
+	Sheet *bool `yaml:"sheet"`
+}
+
+func (s Steps) email() bool { return s.Email == nil || *s.Email }
+func (s Steps) sheet() bool { return s.Sheet == nil || *s.Sheet }
+
+// SheetTarget identifies one source's Google Sheet destination.
+type SheetTarget struct {
+	SpreadsheetID string `yaml:"spreadsheet_id"`
+	SheetName     string `yaml:"sheet_name"`
+}
+
+// EmailTarget identifies one source's report recipient.
+type EmailTarget struct {
+	To string `yaml:"to"`
+}
+
+// SourceSettings is the normalized, source-agnostic view the runner and source
+// factories consume. Per-source structs are projected onto it by Source().
+type SourceSettings struct {
+	Name       string
+	Enabled    bool
+	EmailStep  bool
+	SheetStep  bool
+	Login      Credentials
+	Headless   bool
+	TimeoutSec int
+	DebugDir   string
+	Sheet      SheetTarget
+	EmailTo    string
+	DataDir    string
 }
 
 // Load reads config.yaml (or CONFIG_PATH) via cleanenv.
@@ -78,118 +124,160 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) applyDefaults() {
-	if c.KKIK.TimeoutSec <= 0 {
-		c.KKIK.TimeoutSec = 120
+	if c.Google.OAuthClientFile == "" {
+		c.Google.OAuthClientFile = defaultOAuthClientFile
 	}
-	if c.Sheets.SheetName == "" {
-		c.Sheets.SheetName = defaultSheetName
+	if c.Google.OAuthTokenFile == "" {
+		c.Google.OAuthTokenFile = defaultOAuthTokenFile
 	}
-	if c.Sheets.OAuthClientFile == "" {
-		c.Sheets.OAuthClientFile = defaultOAuthClientFile
+	if c.Sources.KKIK.TimeoutSec <= 0 {
+		c.Sources.KKIK.TimeoutSec = defaultTimeoutSec
 	}
-	if c.Sheets.OAuthTokenFile == "" {
-		c.Sheets.OAuthTokenFile = defaultOAuthTokenFile
+	if c.Sources.KKIK.Sheet.SheetName == "" {
+		c.Sources.KKIK.Sheet.SheetName = defaultSheetName
 	}
 }
 
-// SheetsEnabled reports whether a spreadsheet ID is configured.
-func (c *Config) SheetsEnabled() bool {
-	return c.Sheets.SpreadsheetID != ""
+// Source returns the normalized settings for a registered source name.
+func (c *Config) Source(name string) (SourceSettings, bool) {
+	switch name {
+	case "kkik":
+		return c.Sources.KKIK.settings("kkik"), true
+	default:
+		return SourceSettings{}, false
+	}
 }
 
-// StepCrawlEnabled reports whether live scrape and CSV export should run.
-func (c *Config) StepCrawlEnabled() bool {
-	return c.Steps.Crawl
+// EnabledSources returns the settings of every source with enabled: true.
+func (c *Config) EnabledSources() []SourceSettings {
+	var out []SourceSettings
+	for _, name := range SourceNames() {
+		if s, ok := c.Source(name); ok && s.Enabled {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
-// StepEmailEnabled reports whether the SMTP report should be sent.
-func (c *Config) StepEmailEnabled() bool {
-	return c.Steps.Email
+// SourceNames lists every source known to config (independent of the registry).
+func SourceNames() []string {
+	return []string{"kkik"}
 }
 
-// StepSheetEnabled reports whether rows should be uploaded to Google Sheets.
-func (c *Config) StepSheetEnabled() bool {
-	return c.Steps.Sheet && c.SheetsEnabled()
+func (k KKIKConfig) settings(name string) SourceSettings {
+	dataDir := k.DataDir
+	if dataDir == "" {
+		dataDir = filepath.Join("data", name)
+	}
+	timeout := k.TimeoutSec
+	if timeout <= 0 {
+		timeout = defaultTimeoutSec
+	}
+	sheet := k.Sheet
+	if sheet.SheetName == "" {
+		sheet.SheetName = defaultSheetName
+	}
+	headless := k.Headless == nil || *k.Headless
+	return SourceSettings{
+		Name:       name,
+		Enabled:    k.Enabled,
+		EmailStep:  k.Steps.email(),
+		SheetStep:  k.Steps.sheet(),
+		Login:      k.Login,
+		Headless:   headless,
+		TimeoutSec: timeout,
+		DebugDir:   k.DebugDir,
+		Sheet:      sheet,
+		EmailTo:    k.Email.To,
+		DataDir:    dataDir,
+	}
 }
 
-// ValidateSteps checks that at least one pipeline step is enabled.
-func (c *Config) ValidateSteps() error {
-	if !c.StepCrawlEnabled() && !c.StepEmailEnabled() && !c.StepSheetEnabled() {
-		return fmt.Errorf("at least one of steps.crawl, steps.email, or steps.sheet must be enabled")
+// SheetEnabled reports whether the source should upload to Google Sheets.
+func (s SourceSettings) SheetEnabled() bool {
+	return s.SheetStep && s.Sheet.SpreadsheetID != ""
+}
+
+// EmailEnabled reports whether the source should send an SMTP report.
+func (s SourceSettings) EmailEnabled() bool {
+	return s.EmailStep && s.EmailTo != ""
+}
+
+// Timeout returns the browser timeout for the source.
+func (s SourceSettings) Timeout() time.Duration {
+	return time.Duration(s.TimeoutSec) * time.Second
+}
+
+// CSVPath returns the timestamped CSV output path under the source's data dir.
+func (s SourceSettings) CSVPath(now time.Time) string {
+	return filepath.Join(s.DataDir, fmt.Sprintf("%s_waitlist.csv", now.Format("200601021504")))
+}
+
+// SheetURL returns a browser link to a spreadsheet.
+func SheetURL(spreadsheetID string) string {
+	return fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", spreadsheetID)
+}
+
+// ValidateLogin checks credentials required for a live scrape.
+func (s SourceSettings) ValidateLogin() error {
+	if s.Login.Email == "" {
+		return fmt.Errorf("%s: login.email is required", s.Name)
+	}
+	if s.Login.Password == "" {
+		return fmt.Errorf("%s: login.password is required", s.Name)
 	}
 	return nil
 }
 
-// SheetURL returns a browser link to the configured spreadsheet.
-func (c *Config) SheetURL() string {
-	return fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", c.Sheets.SpreadsheetID)
-}
-
-// OutputCSVPath returns the timestamped CSV output file path for this run.
-func (c *Config) OutputCSVPath() string {
-	return fmt.Sprintf("./%s_kkik_waitlist.csv", time.Now().Format("200601021504"))
-}
-
-// Timeout returns the browser timeout.
-func (c *Config) Timeout() time.Duration {
-	return time.Duration(c.KKIK.TimeoutSec) * time.Second
-}
-
-// ValidateKKIK checks credentials required for live scraping.
-func (c *Config) ValidateKKIK() error {
-	if c.KKIK.Email == "" {
-		return fmt.Errorf("kkik.email is required")
+// ValidateSheet checks settings required for uploading a source's rows.
+func (s SourceSettings) ValidateSheet() error {
+	if s.Sheet.SpreadsheetID == "" {
+		return fmt.Errorf("%s: sheet.spreadsheet_id is required", s.Name)
 	}
-	if c.KKIK.Password == "" {
-		return fmt.Errorf("kkik.password is required")
+	if s.Sheet.SheetName == "" {
+		return fmt.Errorf("%s: sheet.sheet_name is required", s.Name)
 	}
 	return nil
 }
 
-// ValidateSheetsAuth checks settings required for --auth-sheets.
-func (c *Config) ValidateSheetsAuth() error {
-	if c.Sheets.OAuthClientFile == "" {
-		return fmt.Errorf("sheets.oauth_client_file is required")
+// ValidateGoogleAuth checks the shared OAuth client file required for --auth-sheets.
+func (c *Config) ValidateGoogleAuth() error {
+	if c.Google.OAuthClientFile == "" {
+		return fmt.Errorf("google.oauth_client_file is required")
 	}
-	if _, err := os.Stat(c.Sheets.OAuthClientFile); err != nil {
-		return fmt.Errorf("sheets oauth client file %s: %w", c.Sheets.OAuthClientFile, err)
+	if _, err := os.Stat(c.Google.OAuthClientFile); err != nil {
+		return fmt.Errorf("google oauth client file %s: %w", c.Google.OAuthClientFile, err)
 	}
 	return nil
 }
 
-// ValidateSheetsUpdate checks settings required for uploading rows.
-func (c *Config) ValidateSheetsUpdate() error {
-	if c.Sheets.SpreadsheetID == "" {
-		return fmt.Errorf("sheets.spreadsheet_id is required")
-	}
-	if err := c.ValidateSheetsAuth(); err != nil {
+// ValidateGoogleToken checks the shared OAuth token required to upload rows.
+func (c *Config) ValidateGoogleToken() error {
+	if err := c.ValidateGoogleAuth(); err != nil {
 		return err
 	}
-	if c.Sheets.OAuthTokenFile == "" {
-		return fmt.Errorf("sheets.oauth_token_file is required")
+	if c.Google.OAuthTokenFile == "" {
+		return fmt.Errorf("google.oauth_token_file is required")
 	}
-	if _, err := os.Stat(c.Sheets.OAuthTokenFile); err != nil {
-		return fmt.Errorf("sheets oauth token missing at %s (run with --auth-sheets)", c.Sheets.OAuthTokenFile)
+	if _, err := os.Stat(c.Google.OAuthTokenFile); err != nil {
+		return fmt.Errorf("google oauth token missing at %s (run with --auth-sheets)", c.Google.OAuthTokenFile)
 	}
 	return nil
 }
 
-// ValidateSMTP checks settings required for sending email.
+// ValidateSMTP checks the shared settings required to send email.
 func (c *Config) ValidateSMTP() error {
-	if c.Email.To == "" {
-		return fmt.Errorf("email.to is required")
+	if c.SMTP.From == "" {
+		return fmt.Errorf("smtp.from is required")
 	}
-	if c.Email.From == "" {
-		return fmt.Errorf("email.from is required")
+	if c.SMTP.Host == "" {
+		return fmt.Errorf("smtp.host is required")
 	}
-	if c.Email.SMTPHost == "" {
-		return fmt.Errorf("email.smtp_host is required")
+	if c.SMTP.User == "" {
+		return fmt.Errorf("smtp.user is required")
 	}
-	if c.Email.SMTPUser == "" {
-		return fmt.Errorf("email.smtp_user is required")
-	}
-	if c.Email.SMTPPassword == "" {
-		return fmt.Errorf("email.smtp_password is required")
+	if c.SMTP.Password == "" {
+		return fmt.Errorf("smtp.password is required")
 	}
 	return nil
 }

@@ -30,9 +30,9 @@ func TestParseDateHeader(t *testing.T) {
 
 func TestLoadDailySnapshots_dedupSameDay(t *testing.T) {
 	dir := t.TempDir()
-	writeCSV(t, dir, "202605261338_kkik_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,10\n")
-	writeCSV(t, dir, "202605261400_kkik_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,5\n")
-	writeCSV(t, dir, "202605281102_kkik_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,3\n")
+	writeCSV(t, dir, "202605261338_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,10\n")
+	writeCSV(t, dir, "202605261400_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,5\n")
+	writeCSV(t, dir, "202605281102_waitlist.csv", "request_id,dorm,room_type,size_sqm,your_rank\na,D,R,S,3\n")
 
 	snaps, err := LoadDailySnapshots(dir)
 	if err != nil {
@@ -41,17 +41,17 @@ func TestLoadDailySnapshots_dedupSameDay(t *testing.T) {
 	if len(snaps) != 2 {
 		t.Fatalf("len(snapshots) = %d, want 2", len(snaps))
 	}
-	if snaps[0].DateHeader != "260526" || snaps[0].Ranks["a"] != 5 {
+	if snaps[0].DateHeader != "260526" || snaps[0].Ranks["a"] != "5" {
 		t.Errorf("first snapshot = %+v", snaps[0])
 	}
-	if snaps[1].DateHeader != "280526" || snaps[1].Ranks["a"] != 3 {
+	if snaps[1].DateHeader != "280526" || snaps[1].Ranks["a"] != "3" {
 		t.Errorf("second snapshot = %+v", snaps[1])
 	}
 }
 
 func TestLoadDailySnapshots_metadata(t *testing.T) {
 	dir := t.TempDir()
-	writeCSV(t, dir, "202605261338_kkik_waitlist.csv",
+	writeCSV(t, dir, "202605261338_waitlist.csv",
 		"request_id,dorm,room_type,size_sqm,your_rank\n10539078,Husumvej 106,Room,11 m2,25\n")
 
 	snaps, err := LoadDailySnapshots(dir)
@@ -59,7 +59,7 @@ func TestLoadDailySnapshots_metadata(t *testing.T) {
 		t.Fatalf("LoadDailySnapshots() err = %v", err)
 	}
 	row := snaps[0].Rows["10539078"]
-	if row.Dorm != "Husumvej 106" || row.YourRank != 25 {
+	if row.Dorm != "Husumvej 106" || row.RankDisplay != "25" {
 		t.Errorf("row = %+v", row)
 	}
 }

@@ -7,20 +7,19 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"time"
 
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/model"
 )
 
-var waitlistCSVName = regexp.MustCompile(`^(\d{8})\d{4}_kkik_waitlist\.csv$`)
+var waitlistCSVName = regexp.MustCompile(`^(\d{8})\d{4}_waitlist\.csv$`)
 
-// DailySnapshot holds ranks and row metadata for one calendar day.
+// DailySnapshot holds display ranks and row metadata for one calendar day.
 type DailySnapshot struct {
 	DateHeader string
 	Date       time.Time
-	Ranks      map[string]int
-	Rows       map[string]parser.WaitlistRow
+	Ranks      map[string]string // request_id → your_rank as displayed
+	Rows       map[string]model.WaitlistRow
 }
 
 // DateHeader returns a ddmmyy column header for t.
@@ -37,10 +36,10 @@ func ParseDateHeader(header string) (time.Time, bool) {
 	return t, true
 }
 
-// LoadDailySnapshots reads all *_kkik_waitlist.csv files in dir, deduping same-day files
-// by keeping the latest timestamp in the filename.
+// LoadDailySnapshots reads all *_waitlist.csv files in dir, deduping same-day
+// files by keeping the latest timestamp in the filename.
 func LoadDailySnapshots(dir string) ([]DailySnapshot, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*_kkik_waitlist.csv"))
+	matches, err := filepath.Glob(filepath.Join(dir, "*_waitlist.csv"))
 	if err != nil {
 		return nil, fmt.Errorf("glob history csv: %w", err)
 	}
@@ -100,8 +99,8 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 		return DailySnapshot{
 			DateHeader: DateHeader(date),
 			Date:       date,
-			Ranks:      map[string]int{},
-			Rows:       map[string]parser.WaitlistRow{},
+			Ranks:      map[string]string{},
+			Rows:       map[string]model.WaitlistRow{},
 		}, nil
 	}
 
@@ -125,8 +124,8 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 		return DailySnapshot{}, fmt.Errorf("history csv %s: missing request_id or your_rank column", path)
 	}
 
-	ranks := make(map[string]int, len(records)-1)
-	rows := make(map[string]parser.WaitlistRow, len(records)-1)
+	ranks := make(map[string]string, len(records)-1)
+	rows := make(map[string]model.WaitlistRow, len(records)-1)
 	for _, rec := range records[1:] {
 		if len(rec) <= idIdx || len(rec) <= rankIdx {
 			continue
@@ -135,12 +134,9 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 		if id == "" {
 			continue
 		}
-		rank, err := strconv.Atoi(rec[rankIdx])
-		if err != nil {
-			return DailySnapshot{}, fmt.Errorf("history csv %s: invalid rank for %s: %w", path, id, err)
-		}
+		rank := rec[rankIdx]
 		ranks[id] = rank
-		row := parser.WaitlistRow{RequestID: id, YourRank: rank}
+		row := model.WaitlistRow{RequestID: id, RankDisplay: rank}
 		if dormIdx >= 0 && len(rec) > dormIdx {
 			row.Dorm = rec[dormIdx]
 		}

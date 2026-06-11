@@ -13,59 +13,66 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	"denmark-housing-waitlist/internal/config"
-	"denmark-housing-waitlist/internal/export"
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/config"
+	"housing-waitlist/internal/export"
+	"housing-waitlist/internal/model"
 )
 
-// SendReport emails the CSV report with a short summary.
-func SendReport(cfg *config.Config, result *parser.Result, csvPath, sheetURL string) error {
-	body := buildBody(result, sheetURL)
-	subject := fmt.Sprintf("KKIK waitlist report — %s", time.Now().Format("2006-01-02"))
+// Report holds the per-source labels used in the email subject and body.
+type Report struct {
+	Title     string // source title, e.g. "KKIK"
+	PortalURL string // source portal link
+	To        string // recipient
+}
 
-	msg, err := buildMessage(cfg, subject, body, csvPath)
+// SendReport emails the CSV report with a short summary.
+func SendReport(cfg config.SMTP, report Report, result *model.Result, csvPath, sheetURL string) error {
+	body := buildBody(report, result, sheetURL)
+	subject := fmt.Sprintf("%s waitlist report — %s", report.Title, time.Now().Format("2006-01-02"))
+
+	msg, err := buildMessage(cfg, report.To, subject, body, csvPath)
 	if err != nil {
 		return err
 	}
 
-	if err := sendSMTP(cfg, msg); err != nil {
+	if err := sendSMTP(cfg, report.To, msg); err != nil {
 		return fmt.Errorf("send mail: %w", err)
 	}
 	return nil
 }
 
-func sendSMTP(cfg *config.Config, msg []byte) error {
-	e := cfg.Email
-	addr := fmt.Sprintf("%s:%d", e.SMTPHost, e.SMTPPort)
+func sendSMTP(cfg config.SMTP, to string, msg []byte) error {
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, e.SMTPHost)
+	client, err := smtp.NewClient(conn, cfg.Host)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
 	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err := client.StartTLS(&tls.Config{ServerName: e.SMTPHost}); err != nil {
+		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
 			return err
 		}
 	}
 
-	auth := smtp.PlainAuth("", e.SMTPUser, e.SMTPPassword, e.SMTPHost)
+	auth := smtp.PlainAuth("", cfg.User, cfg.Password, cfg.Host)
 	if err := client.Auth(auth); err != nil {
 		return err
 	}
-	if err := client.Mail(e.From); err != nil {
+	if err := client.Mail(cfg.From); err != nil {
 		return err
 	}
-	if err := client.Rcpt(e.To); err != nil {
+	if err := client.Rcpt(to); err != nil {
 		return err
 	}
 	w, err := client.Data()
@@ -81,11 +88,11 @@ func sendSMTP(cfg *config.Config, msg []byte) error {
 	return client.Quit()
 }
 
-func buildBody(result *parser.Result, sheetURL string) string {
+func buildBody(report Report, result *model.Result, sheetURL string) string {
 	var b strings.Builder
 	fmt.Fprint(&b, `<!DOCTYPE html><html><body>`)
 	fmt.Fprint(&b, `<p>Kính mợ,</p>`)
-	fmt.Fprint(&b, `<p><strong>KKIK waitlist report</strong><br>`)
+	fmt.Fprintf(&b, `<p><strong>%s waitlist report</strong><br>`, html.EscapeString(report.Title))
 	fmt.Fprintf(&b, `Generated: %s<br>`, time.Now().Format(time.RFC3339))
 	fmt.Fprintf(&b, `Rows: %d<br>`, len(result.Rows))
 	if result.Meta.ApplicantName != "" {
@@ -103,13 +110,13 @@ func buildBody(result *parser.Result, sheetURL string) string {
 	}
 	for i := 0; i < limit; i++ {
 		row := sorted[i]
-		line := fmt.Sprintf("%d. #%d — %s — %s", i+1, row.YourRank, row.Dorm, truncate(row.RoomType, 60))
+		line := fmt.Sprintf("%d. #%s — %s — %s", i+1, row.RankDisplay, row.Dorm, truncate(row.RoomType, 60))
 		fmt.Fprintf(&b, `%s<br>`, html.EscapeString(line))
 	}
 	fmt.Fprint(&b, `</p>`)
 
-	portalURL := html.EscapeString(config.HousingURL)
-	fmt.Fprintf(&b, `<p>For more details, see <a href="%s">the KKIK housing portal</a>`, portalURL)
+	fmt.Fprintf(&b, `<p>For more details, see <a href="%s">the %s housing portal</a>`,
+		html.EscapeString(report.PortalURL), html.EscapeString(report.Title))
 	if sheetURL != "" {
 		fmt.Fprintf(&b, `, <a href="%s">the live Google Sheet</a>`, html.EscapeString(sheetURL))
 	}
@@ -118,7 +125,7 @@ func buildBody(result *parser.Result, sheetURL string) string {
 	return b.String()
 }
 
-func buildMessage(cfg *config.Config, subject, body, csvPath string) ([]byte, error) {
+func buildMessage(cfg config.SMTP, to, subject, body, csvPath string) ([]byte, error) {
 	csvData, err := os.ReadFile(csvPath)
 	if err != nil {
 		return nil, fmt.Errorf("read csv attachment: %w", err)
@@ -128,8 +135,8 @@ func buildMessage(cfg *config.Config, subject, body, csvPath string) ([]byte, er
 	w := multipart.NewWriter(&buf)
 
 	h := make(map[string][]string)
-	h["From"] = []string{cfg.Email.From}
-	h["To"] = []string{cfg.Email.To}
+	h["From"] = []string{cfg.From}
+	h["To"] = []string{to}
 	h["Subject"] = []string{subject}
 	h["MIME-Version"] = []string{"1.0"}
 	h["Content-Type"] = []string{fmt.Sprintf("multipart/mixed; boundary=%s", w.Boundary())}
@@ -195,6 +202,6 @@ func truncate(s string, max int) string {
 }
 
 // DialSMTP can be used in tests to verify connectivity.
-func DialSMTP(cfg *config.Config) (net.Conn, error) {
-	return net.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Email.SMTPHost, cfg.Email.SMTPPort))
+func DialSMTP(cfg config.SMTP) (net.Conn, error) {
+	return net.Dial("tcp", net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)))
 }

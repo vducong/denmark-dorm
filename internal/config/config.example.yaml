@@ -1,30 +1,40 @@
 # Copy to config.yaml and fill in your values.
 # Override file path: CONFIG_PATH=/path/to/config.yaml
 
-kkik:
-  email: you@example.com
-  password: your-password
-  headless: true
-  timeout_sec: 120
-  # debug_dir: ./debug
-
-email:
-  to: you@example.com
+# Shared mail transport / sender. Secrets may come from env:
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+smtp:
   from: you@example.com
-  smtp_host: smtp.gmail.com
-  smtp_port: 587
-  smtp_user: you@example.com
-  smtp_password: your-gmail-app-password
+  host: smtp.gmail.com
+  port: 587
+  user: you@example.com
+  password: your-gmail-app-password
 
-# Optional: upload results to Google Sheets (OAuth — see README)
-sheets:
-  spreadsheet_id: ""
-  sheet_name: Sheet1
-  oauth_client_file: ./client_secret.json
-  oauth_token_file: ./token.json
+# Shared Google OAuth identity for Sheets (see README for setup).
+# Env: GOOGLE_OAUTH_CLIENT_FILE, GOOGLE_OAUTH_TOKEN_FILE
+google:
+  oauth_client_file: ./internal/config/client_secret.json
+  oauth_token_file: ./internal/config/token.json
 
-# Pipeline steps (all default to true). Env: STEPS_CRAWL, STEPS_EMAIL, STEPS_SHEET
-steps:
-  crawl: true   # live scrape + write CSV
-  email: true   # SMTP report with CSV attachment
-  sheet: true   # upload rows (also requires sheets.spreadsheet_id)
+# Per-source settings. Add a block per source; run all enabled sources, or
+# select with --source <name>[,<name>...].
+sources:
+  kkik:
+    enabled: true
+    # steps default to true when omitted; crawl (fetch + CSV) always runs.
+    steps:
+      email: true   # SMTP report with CSV attachment
+      sheet: true    # upload rows (also requires sheet.spreadsheet_id)
+    # Login. Env override: KKIK_EMAIL, KKIK_PASSWORD
+    login:
+      email: you@example.com
+      password: your-password
+    headless: true       # set false to watch the browser (debugging)
+    timeout_sec: 120     # env: KKIK_TIMEOUT_SEC
+    # debug_dir: ./debug # env: KKIK_DEBUG_DIR
+    sheet:
+      spreadsheet_id: ""
+      sheet_name: Sheet1
+    email:
+      to: you@example.com
+    data_dir: ./data/kkik  # CSV history dir (defaults to ./data/<source>)

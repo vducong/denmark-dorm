@@ -1,30 +1,37 @@
 package sheets
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
-	"denmark-housing-waitlist/internal/export"
-	"denmark-housing-waitlist/internal/parser"
+	"housing-waitlist/internal/export"
+	"housing-waitlist/internal/model"
 )
+
+// numericOrder is a stand-in for a source's RankOrder over numeric ranks.
+func numericOrder(s string) (int, bool) {
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
 
 func TestBuildMatrix_backfillAndAppend(t *testing.T) {
 	snapshots := []export.DailySnapshot{
 		{
 			DateHeader: "260526",
 			Date:       time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC),
-			Ranks:      map[string]int{"a": 25},
-			Rows: map[string]parser.WaitlistRow{
-				"a": {RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", YourRank: 25},
+			Ranks:      map[string]string{"a": "25"},
+			Rows: map[string]model.WaitlistRow{
+				"a": {RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "25", RankOrder: 25},
 			},
 		},
 	}
 	today := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
-	rows := []parser.WaitlistRow{
-		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", YourRank: 22},
+	rows := []model.WaitlistRow{
+		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, snapshots, nil, today)
+	matrix, err := BuildMatrix(rows, snapshots, nil, today, numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
@@ -50,11 +57,11 @@ func TestBuildMatrix_sameDayUpdate(t *testing.T) {
 		{"request_id", "dorm", "room_type", "size_sqm", latestDiffHeader, "090626"},
 		{"a", "D1", "R1", "S1", "", "30"},
 	}
-	rows := []parser.WaitlistRow{
-		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", YourRank: 22},
+	rows := []model.WaitlistRow{
+		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, existing, today)
+	matrix, err := BuildMatrix(rows, nil, existing, today, numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
@@ -77,14 +84,14 @@ func TestBuildMatrix_legacyMigration(t *testing.T) {
 		{
 			DateHeader: "260526",
 			Date:       time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC),
-			Ranks:      map[string]int{"a": 25},
+			Ranks:      map[string]string{"a": "25"},
 		},
 	}
-	rows := []parser.WaitlistRow{
-		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", YourRank: 22},
+	rows := []model.WaitlistRow{
+		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, snapshots, existing, today)
+	matrix, err := BuildMatrix(rows, snapshots, existing, today, numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
@@ -99,12 +106,12 @@ func TestBuildMatrix_legacyMigration(t *testing.T) {
 
 func TestBuildMatrix_sortedByTodayRank(t *testing.T) {
 	today := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
-	rows := []parser.WaitlistRow{
-		{RequestID: "b", Dorm: "D2", YourRank: 20},
-		{RequestID: "a", Dorm: "D1", YourRank: 5},
+	rows := []model.WaitlistRow{
+		{RequestID: "b", Dorm: "D2", RankDisplay: "20", RankOrder: 20},
+		{RequestID: "a", Dorm: "D1", RankDisplay: "5", RankOrder: 5},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, nil, today)
+	matrix, err := BuildMatrix(rows, nil, nil, today, numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
@@ -118,7 +125,7 @@ func TestSheetDiff(t *testing.T) {
 		"260526": "25",
 		"090626": "22",
 	}
-	got := sheetDiff("a", "090626", []string{"260526", "090626"}, rankCells)
+	got := sheetDiff("090626", []string{"260526", "090626"}, rankCells, numericOrder)
 	if got != "+3" {
 		t.Errorf("sheetDiff() = %q, want +3", got)
 	}
