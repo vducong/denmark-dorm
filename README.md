@@ -2,7 +2,8 @@
 
 Go CLI that crawls student-housing waitlist portals, normalizes each into a
 common row model, writes a per-source CSV sorted by your waitlist position (best
-first), optionally updates a Google Sheet, and emails the report.
+first), optionally updates a Google Sheet, and emails one combined report
+covering every source.
 
 Sources are pluggable. The built-in source is
 [Kollegiernes Kontor i København](https://www.kollegierneskontor.dk) (`kkik`).
@@ -33,8 +34,9 @@ copy from [`internal/config/config.example.yaml`](internal/config/config.example
 under `sources`.
 
 ```yaml
-smtp:            # shared mail transport / sender
+smtp:            # shared transport / sender / recipient — one email to `to`
   from: you@example.com
+  to: you@example.com
   host: smtp.gmail.com
   port: 587
   user: you@example.com
@@ -58,14 +60,12 @@ sources:
     sheet:
       spreadsheet_id: "your-spreadsheet-id"
       sheet_name: Sheet1
-    email:
-      to: you@example.com
     data_dir: ./data/kkik  # CSV history dir (defaults to ./data/<source>)
 ```
 
 Loaded with [cleanenv](https://github.com/ilyakaznacheev/cleanenv). Secrets can
 come from the environment instead of YAML: `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `GOOGLE_OAUTH_CLIENT_FILE`,
+`SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TO`, `GOOGLE_OAUTH_CLIENT_FILE`,
 `GOOGLE_OAUTH_TOKEN_FILE`, and per-source `KKIK_EMAIL`, `KKIK_PASSWORD`,
 `KKIK_TIMEOUT_SEC`, `KKIK_DEBUG_DIR`. Set `CONFIG_PATH` to use another file.
 
@@ -75,11 +75,14 @@ come from the environment instead of YAML: `SMTP_HOST`, `SMTP_PORT`,
 | ---------------- | ------- | ------------------------------------------------------------------ |
 | `enabled`        | `false` | Include this source when no `--source` flag is given               |
 | (crawl)          | always  | Live scrape + write timestamped CSV under `data_dir`               |
-| `steps.email`    | `true`  | Send SMTP report with CSV attachment (needs `email.to`)            |
+| `steps.email`    | `true`  | Include this source's section in the combined email (needs `smtp.to`) |
 | `steps.sheet`    | `true`  | Upload rows to Google Sheets (needs `sheet.spreadsheet_id`)        |
 
-Each run executes the pipeline per source: **fetch → parse → CSV → sheet →
-email**. Outputs are per source and never merged.
+Each source is scraped independently — **fetch → parse → CSV → sheet** — and its
+CSV and Google Sheet stay per source. Email is the exception: every
+email-enabled source contributes a section, and **one combined email** (with each
+source's CSV attached) is sent to `smtp.to` after all sources succeed. If any
+source fails, the run aborts and no email is sent.
 
 ## Usage
 

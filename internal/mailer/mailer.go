@@ -22,27 +22,42 @@ import (
 	"housing-waitlist/internal/model"
 )
 
-// Report holds the per-source labels used in the email subject and body.
-type Report struct {
+// Section is one source's contribution to the combined report: its labels,
+// parsed rows, CSV attachment, and (optional) live sheet link.
+type Section struct {
+	Name      string // source token, e.g. "kkik"; prefixes the CSV attachment filename
 	Title     string // source title, e.g. "KKIK"
 	PortalURL string // source portal link
-	To        string // recipient
+	Result    *model.Result
+	CSVPath   string
+	SheetURL  string
 }
 
-// SendReport emails the CSV report with a short summary.
-func SendReport(cfg config.SMTP, report Report, result *model.Result, csvPath, sheetURL string) error {
-	body := buildBody(report, result, sheetURL)
-	subject := fmt.Sprintf("%s waitlist report — %s", report.Title, time.Now().Format("2006-01-02"))
+// SendDigest emails one combined report covering every section, to a single recipient.
+func SendDigest(cfg config.SMTP, to string, sections []Section) error {
+	if len(sections) == 0 {
+		return nil
+	}
+	subject := digestSubject(sections, time.Now())
 
-	msg, err := buildMessage(cfg, report.To, subject, body, csvPath)
+	msg, err := buildMessage(cfg, to, subject, sections)
 	if err != nil {
 		return err
 	}
 
-	if err := sendSMTP(cfg, report.To, msg); err != nil {
+	if err := sendSMTP(cfg, to, msg); err != nil {
 		return fmt.Errorf("send mail: %w", err)
 	}
 	return nil
+}
+
+// digestSubject names every source so the one email is recognizable at a glance.
+func digestSubject(sections []Section, now time.Time) string {
+	titles := make([]string, 0, len(sections))
+	for _, s := range sections {
+		titles = append(titles, s.Title)
+	}
+	return fmt.Sprintf("Denmark Housing Waitlist Report (%s) — %s", strings.Join(titles, ", "), now.Format("2006-01-02"))
 }
 
 func sendSMTP(cfg config.SMTP, to string, msg []byte) error {
@@ -88,22 +103,33 @@ func sendSMTP(cfg config.SMTP, to string, msg []byte) error {
 	return client.Quit()
 }
 
-func buildBody(report Report, result *model.Result, sheetURL string) string {
+// buildDigestBody renders one combined email with a section per source.
+func buildDigestBody(sections []Section) string {
 	var b strings.Builder
 	fmt.Fprint(&b, `<!DOCTYPE html><html><body>`)
 	fmt.Fprint(&b, `<p>Kính mợ,</p>`)
-	fmt.Fprintf(&b, `<p><strong>%s waitlist report</strong><br>`, html.EscapeString(report.Title))
-	fmt.Fprintf(&b, `Generated: %s<br>`, time.Now().Format(time.RFC3339))
-	fmt.Fprintf(&b, `Rows: %d<br>`, len(result.Rows))
-	if result.Meta.ApplicantName != "" {
-		fmt.Fprintf(&b, `Applicant: %s (aka em pé cụa anh)<br>`, html.EscapeString(result.Meta.ApplicantName))
+	for _, s := range sections {
+		writeSection(&b, s)
 	}
-	if result.Meta.RenewalDeadline != "" {
-		fmt.Fprintf(&b, `Renew before: %s<br>`, html.EscapeString(result.Meta.RenewalDeadline))
-	}
+	fmt.Fprintf(&b, `<p>Generated: %s</p>`, time.Now().Format(time.RFC3339))
+	fmt.Fprint(&b, `<p>Anh Zou trân trọng chơm một cái &lt;3</p></body></html>`)
+	return b.String()
+}
 
-	sorted := export.SortRows(result.Rows)
-	fmt.Fprint(&b, `<p><strong>Top 5 best positions:</strong><br>`)
+// writeSection renders one source's block: heading, meta, top-5, and links.
+func writeSection(b *strings.Builder, s Section) {
+	fmt.Fprintf(b, `<h2>%s waitlist:</h2>`, html.EscapeString(s.Title))
+	fmt.Fprintf(b, `<p>Rows: %d<br>`, len(s.Result.Rows))
+	if s.Result.Meta.ApplicantName != "" {
+		fmt.Fprintf(b, `Applicant: %s (aka em pé cụa anh)<br>`, html.EscapeString(s.Result.Meta.ApplicantName))
+	}
+	if s.Result.Meta.RenewalDeadline != "" {
+		fmt.Fprintf(b, `Renew before: %s<br>`, html.EscapeString(s.Result.Meta.RenewalDeadline))
+	}
+	fmt.Fprint(b, `</p>`)
+
+	sorted := export.SortRows(s.Result.Rows)
+	fmt.Fprint(b, `<p><strong>Top 5 best positions:</strong><br>`)
 	limit := 5
 	if len(sorted) < limit {
 		limit = len(sorted)
@@ -111,26 +137,19 @@ func buildBody(report Report, result *model.Result, sheetURL string) string {
 	for i := 0; i < limit; i++ {
 		row := sorted[i]
 		line := fmt.Sprintf("%d. #%s — %s — %s", i+1, row.RankDisplay, row.Dorm, truncate(row.RoomType, 60))
-		fmt.Fprintf(&b, `%s<br>`, html.EscapeString(line))
+		fmt.Fprintf(b, `%s<br>`, html.EscapeString(line))
 	}
-	fmt.Fprint(&b, `</p>`)
+	fmt.Fprint(b, `</p>`)
 
-	fmt.Fprintf(&b, `<p>For more details, see <a href="%s">the %s housing portal</a>`,
-		html.EscapeString(report.PortalURL), html.EscapeString(report.Title))
-	if sheetURL != "" {
-		fmt.Fprintf(&b, `, <a href="%s">the live Google Sheet</a>`, html.EscapeString(sheetURL))
+	fmt.Fprintf(b, `<p>For more details, see <a href="%s">the %s housing portal</a>`,
+		html.EscapeString(s.PortalURL), html.EscapeString(s.Title))
+	if s.SheetURL != "" {
+		fmt.Fprintf(b, `, <a href="%s">the live Google Sheet</a>`, html.EscapeString(s.SheetURL))
 	}
-	fmt.Fprint(&b, `, or the attached CSV file.</p>`)
-	fmt.Fprint(&b, `<p>Anh Zou trân trọng chơm một cái &lt;3</p></body></html>`)
-	return b.String()
+	fmt.Fprint(b, `, or the attached CSV file.</p>`)
 }
 
-func buildMessage(cfg config.SMTP, to, subject, body, csvPath string) ([]byte, error) {
-	csvData, err := os.ReadFile(csvPath)
-	if err != nil {
-		return nil, fmt.Errorf("read csv attachment: %w", err)
-	}
-
+func buildMessage(cfg config.SMTP, to, subject string, sections []Section) ([]byte, error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
@@ -150,31 +169,43 @@ func buildMessage(cfg config.SMTP, to, subject, body, csvPath string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if _, err := htmlPart.Write([]byte(body)); err != nil {
+	if _, err := htmlPart.Write([]byte(buildDigestBody(sections))); err != nil {
 		return nil, err
 	}
 
-	fileName := filepath.Base(csvPath)
-	attachPart, err := w.CreatePart(map[string][]string{
-		"Content-Type":              {"text/csv; charset=UTF-8"},
-		"Content-Transfer-Encoding": {"base64"},
-		"Content-Disposition":       {fmt.Sprintf(`attachment; filename="%s"`, mime.QEncoding.Encode("utf-8", fileName))},
-	})
-	if err != nil {
-		return nil, err
-	}
-	enc := base64.NewEncoder(base64.StdEncoding, attachPart)
-	if _, err := enc.Write(csvData); err != nil {
-		return nil, err
-	}
-	if err := enc.Close(); err != nil {
-		return nil, err
+	for _, s := range sections {
+		if err := attachCSV(w, s); err != nil {
+			return nil, err
+		}
 	}
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
 
 	return buf.Bytes(), nil
+}
+
+// attachCSV adds one source's CSV as an attachment, prefixing the filename with
+// the source name so same-minute timestamped basenames don't collide.
+func attachCSV(w *multipart.Writer, s Section) error {
+	csvData, err := os.ReadFile(s.CSVPath)
+	if err != nil {
+		return fmt.Errorf("read csv attachment for %s: %w", s.Name, err)
+	}
+	fileName := fmt.Sprintf("%s_%s", s.Name, filepath.Base(s.CSVPath))
+	attachPart, err := w.CreatePart(map[string][]string{
+		"Content-Type":              {"text/csv; charset=UTF-8"},
+		"Content-Transfer-Encoding": {"base64"},
+		"Content-Disposition":       {fmt.Sprintf(`attachment; filename="%s"`, mime.QEncoding.Encode("utf-8", fileName))},
+	})
+	if err != nil {
+		return err
+	}
+	enc := base64.NewEncoder(base64.StdEncoding, attachPart)
+	if _, err := enc.Write(csvData); err != nil {
+		return err
+	}
+	return enc.Close()
 }
 
 func writeHeaders(buf *bytes.Buffer, h map[string][]string) error {

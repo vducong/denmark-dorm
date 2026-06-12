@@ -1,10 +1,12 @@
 # Copy to config.yaml and fill in your values.
 # Override file path: CONFIG_PATH=/path/to/config.yaml
 
-# Shared mail transport / sender. Secrets may come from env:
-#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+# Shared mail transport / sender / recipient. Secrets may come from env:
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TO
+# All enabled sources are combined into ONE email sent to `to`.
 smtp:
   from: you@example.com
+  to: you@example.com   # single recipient for the combined report
   host: smtp.gmail.com
   port: 587
   user: you@example.com
@@ -23,7 +25,7 @@ sources:
     enabled: true
     # steps default to true when omitted; crawl (fetch + CSV) always runs.
     steps:
-      email: true   # SMTP report with CSV attachment
+      email: true   # include this source's section in the combined email
       sheet: true    # upload rows (also requires sheet.spreadsheet_id)
     # Login. Env override: KKIK_EMAIL, KKIK_PASSWORD
     login:
@@ -35,14 +37,12 @@ sources:
     sheet:
       spreadsheet_id: ""
       sheet_name: Sheet1
-    email:
-      to: you@example.com
     data_dir: ./data/kkik  # CSV history dir (defaults to ./data/<source>)
 
   sdk:                     # mit.s.dk/studiebolig
     enabled: true
     steps:
-      email: true
+      email: true   # include this source's section in the combined email
       sheet: true
     # Login. Env override: SDK_EMAIL, SDK_PASSWORD
     login:
@@ -54,6 +54,4 @@ sources:
     sheet:
       spreadsheet_id: ""
       sheet_name: Sheet1
-    email:
-      to: you@example.com
     data_dir: ./data/sdk  # CSV history dir (defaults to ./data/<source>)

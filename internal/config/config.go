@@ -30,13 +30,17 @@ type Config struct {
 	Sources Sources `yaml:"sources"`
 }
 
-// SMTP holds the shared mail transport and sender identity.
+// SMTP holds the shared mail transport, sender, and the single combined recipient.
+//
+// To is global rather than per-source: every enabled source's section ships in
+// one digest to this address, so the recipient is a shared concern like From.
 type SMTP struct {
 	Host     string `yaml:"host"     env:"SMTP_HOST"`
 	Port     int    `yaml:"port"     env:"SMTP_PORT" env-default:"587"`
 	User     string `yaml:"user"     env:"SMTP_USER"`
 	Password string `yaml:"password" env:"SMTP_PASSWORD"`
 	From     string `yaml:"from"     env:"SMTP_FROM"`
+	To       string `yaml:"to"       env:"SMTP_TO"`
 }
 
 // Google holds the shared OAuth identity used for Google Sheets.
@@ -64,7 +68,6 @@ type KKIKConfig struct {
 	TimeoutSec int         `yaml:"timeout_sec" env:"KKIK_TIMEOUT_SEC" env-default:"120"`
 	DebugDir   string      `yaml:"debug_dir"   env:"KKIK_DEBUG_DIR"`
 	Sheet      SheetTarget `yaml:"sheet"`
-	Email      EmailTarget `yaml:"email"`
 	DataDir    string      `yaml:"data_dir"`
 }
 
@@ -87,7 +90,6 @@ type SDKConfig struct {
 	TimeoutSec int         `yaml:"timeout_sec" env:"SDK_TIMEOUT_SEC" env-default:"120"`
 	DebugDir   string      `yaml:"debug_dir"   env:"SDK_DEBUG_DIR"`
 	Sheet      SheetTarget `yaml:"sheet"`
-	Email      EmailTarget `yaml:"email"`
 	DataDir    string      `yaml:"data_dir"`
 }
 
@@ -114,11 +116,6 @@ type SheetTarget struct {
 	SheetName     string `yaml:"sheet_name"`
 }
 
-// EmailTarget identifies one source's report recipient.
-type EmailTarget struct {
-	To string `yaml:"to"`
-}
-
 // SourceSettings is the normalized, source-agnostic view the runner and source factories consume.
 // Per-source structs are projected onto it by Source().
 type SourceSettings struct {
@@ -131,7 +128,6 @@ type SourceSettings struct {
 	TimeoutSec int
 	DebugDir   string
 	Sheet      SheetTarget
-	EmailTo    string
 	DataDir    string
 }
 
@@ -223,7 +219,6 @@ func (k KKIKConfig) settings(name string) SourceSettings {
 		TimeoutSec: timeout,
 		DebugDir:   k.DebugDir,
 		Sheet:      sheet,
-		EmailTo:    k.Email.To,
 		DataDir:    dataDir,
 	}
 }
@@ -252,7 +247,6 @@ func (s SDKConfig) settings(name string) SourceSettings {
 		TimeoutSec: timeout,
 		DebugDir:   s.DebugDir,
 		Sheet:      sheet,
-		EmailTo:    s.Email.To,
 		DataDir:    dataDir,
 	}
 }
@@ -262,9 +256,10 @@ func (s SourceSettings) SheetEnabled() bool {
 	return s.SheetStep && s.Sheet.SpreadsheetID != ""
 }
 
-// EmailEnabled reports whether the source should send an SMTP report.
+// EmailEnabled reports whether this source contributes a section to the combined
+// email. The recipient is global (smtp.to), so only the per-source step gates here.
 func (s SourceSettings) EmailEnabled() bool {
-	return s.EmailStep && s.EmailTo != ""
+	return s.EmailStep
 }
 
 // Timeout returns the browser timeout for the source.
@@ -342,6 +337,9 @@ func (c *Config) ValidateSMTP() error {
 	}
 	if c.SMTP.Password == "" {
 		return fmt.Errorf("smtp.password is required")
+	}
+	if c.SMTP.To == "" {
+		return fmt.Errorf("smtp.to is required")
 	}
 	return nil
 }

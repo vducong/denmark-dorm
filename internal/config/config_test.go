@@ -100,13 +100,18 @@ func TestSourceSettings_stepGates(t *testing.T) {
 	if s.SheetEnabled() {
 		t.Error("sheet should be disabled without spreadsheet_id")
 	}
-	if s.EmailEnabled() {
-		t.Error("email should be disabled without recipient")
+	// The recipient is now global (smtp.to), so EmailEnabled tracks only the
+	// per-source step toggle: a source with the step on contributes its section.
+	if !s.EmailEnabled() {
+		t.Error("email should be enabled when the step is on")
 	}
 	s.Sheet.SpreadsheetID = "abc"
-	s.EmailTo = "x@y.com"
-	if !s.SheetEnabled() || !s.EmailEnabled() {
-		t.Error("expected both enabled once targets set")
+	if !s.SheetEnabled() {
+		t.Error("expected sheet enabled once spreadsheet_id set")
+	}
+	s.EmailStep = false
+	if s.EmailEnabled() {
+		t.Error("email should be disabled when step off")
 	}
 	s.SheetStep = false
 	if s.SheetEnabled() {
@@ -149,7 +154,12 @@ func TestValidateSMTP(t *testing.T) {
 	if err := cfg.ValidateSMTP(); err == nil {
 		t.Fatal("expected error for empty smtp")
 	}
+	// The single combined recipient (smtp.to) is required to send.
 	cfg.SMTP = SMTP{From: "a@b.com", Host: "h", User: "u", Password: "p"}
+	if err := cfg.ValidateSMTP(); err == nil {
+		t.Fatal("expected error when smtp.to is empty")
+	}
+	cfg.SMTP.To = "to@b.com"
 	if err := cfg.ValidateSMTP(); err != nil {
 		t.Fatalf("ValidateSMTP: %v", err)
 	}
