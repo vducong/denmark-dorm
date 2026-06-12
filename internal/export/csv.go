@@ -26,8 +26,7 @@ func SortRows(rows []model.WaitlistRow) []model.WaitlistRow {
 	return out
 }
 
-// WriteCSV writes sorted rows to path with a stable header, creating the parent
-// directory if needed.
+// WriteCSV writes sorted rows to path with a stable header, creating the parent directory if needed.
 func WriteCSV(path string, rows []model.WaitlistRow, prevOrders map[string]int) error {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

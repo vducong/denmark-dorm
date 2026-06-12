@@ -36,8 +36,8 @@ func ParseDateHeader(header string) (time.Time, bool) {
 	return t, true
 }
 
-// LoadDailySnapshots reads all *_waitlist.csv files in dir, deduping same-day
-// files by keeping the latest timestamp in the filename.
+// LoadDailySnapshots reads all *_waitlist.csv files in dir,
+// deduping same-day files by keeping the latest timestamp in the filename.
 func LoadDailySnapshots(dir string) ([]DailySnapshot, error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "*_waitlist.csv"))
 	if err != nil {
@@ -105,13 +105,15 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 	}
 
 	header := records[0]
-	idIdx, dormIdx, roomIdx, sizeIdx, rankIdx := -1, -1, -1, -1, -1
+	idIdx, dormIdx, urlIdx, roomIdx, sizeIdx, rankIdx := -1, -1, -1, -1, -1, -1
 	for i, col := range header {
 		switch col {
 		case "request_id":
 			idIdx = i
 		case "dorm":
 			dormIdx = i
+		case "url":
+			urlIdx = i
 		case "room_type":
 			roomIdx = i
 		case "size_sqm":
@@ -139,6 +141,9 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 		row := model.WaitlistRow{RequestID: id, RankDisplay: rank}
 		if dormIdx >= 0 && len(rec) > dormIdx {
 			row.Dorm = rec[dormIdx]
+		}
+		if urlIdx >= 0 && len(rec) > urlIdx {
+			row.URL = rec[urlIdx]
 		}
 		if roomIdx >= 0 && len(rec) > roomIdx {
 			row.RoomType = rec[roomIdx]

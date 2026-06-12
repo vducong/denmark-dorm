@@ -1,5 +1,6 @@
-// Package runner orchestrates the per-source pipeline: fetch → parse → CSV →
-// sheet → email. It is source-agnostic; sources are resolved from the registry.
+// Package runner orchestrates the per-source pipeline:
+// fetch → parse → CSV → sheet → email.
+// It is source-agnostic; sources are resolved from the registry.
 package runner
 
 import (
@@ -19,16 +20,15 @@ import (
 
 // Options controls a single run.
 type Options struct {
-	// DumpHTML, when set, writes the fetched HTML to this path. Only valid with
-	// a single selected source.
+	// DumpHTML, when set, writes the fetched HTML to this path.
+	// Only valid with a single selected source.
 	DumpHTML string
 	// NoEmail / NoSheet force those steps off for this run, overriding config.
 	NoEmail bool
 	NoSheet bool
 }
 
-// Run executes the pipeline for each source's settings, stopping at the first
-// error.
+// Run executes the pipeline for each source's settings, stopping at the first error.
 func Run(ctx context.Context, cfg *config.Config, settings []config.SourceSettings, opts Options) error {
 	for _, s := range settings {
 		if err := runSource(ctx, cfg, s, opts); err != nil {

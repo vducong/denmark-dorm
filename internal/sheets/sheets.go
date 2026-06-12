@@ -14,12 +14,14 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const headerRowIndex = 2 // 0-based; row 0 is "Last updated at" metadata, row 1 is the note
+const (
+	headerRowIndex = 2 // 0-based; row 0 is "Last updated at" metadata, row 1 is the note
 
-// Update merges scrape data into the target tab using time-series ddmmyy
-// columns. csvDir is the source's data dir scanned for historical snapshots;
-// note is the source legend written under the metadata row; rankOrder projects
-// display ranks for the latest_diff column.
+	firstColumnWidthPx = 120
+	urlColumnWidthPx   = 150
+)
+
+// Update merges scrape data into the target tab using time-series ddmmyy columns.
 func Update(
 	ctx context.Context,
 	google config.Google,
@@ -115,13 +117,43 @@ func formatSheet(ctx context.Context, svc *sheets.Service, spreadsheetID string,
 				},
 			},
 			{
+				// Auto-size data columns only; column A is pinned below
+				// so the long note legend in A2 cannot stretch it.
 				AutoResizeDimensions: &sheets.AutoResizeDimensionsRequest{
 					Dimensions: &sheets.DimensionRange{
 						SheetId:    sheetID,
 						Dimension:  "COLUMNS",
-						StartIndex: 0,
+						StartIndex: 1,
 						EndIndex:   int64(columnCount),
 					},
+				},
+			},
+			{
+				UpdateDimensionProperties: &sheets.UpdateDimensionPropertiesRequest{
+					Range: &sheets.DimensionRange{
+						SheetId:    sheetID,
+						Dimension:  "COLUMNS",
+						StartIndex: 0,
+						EndIndex:   1,
+					},
+					Properties: &sheets.DimensionProperties{
+						PixelSize: firstColumnWidthPx,
+					},
+					Fields: "pixelSize",
+				},
+			},
+			{
+				UpdateDimensionProperties: &sheets.UpdateDimensionPropertiesRequest{
+					Range: &sheets.DimensionRange{
+						SheetId:    sheetID,
+						Dimension:  "COLUMNS",
+						StartIndex: 2,
+						EndIndex:   3,
+					},
+					Properties: &sheets.DimensionProperties{
+						PixelSize: urlColumnWidthPx,
+					},
+					Fields: "pixelSize",
 				},
 			},
 		},

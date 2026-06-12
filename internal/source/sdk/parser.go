@@ -5,8 +5,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"housing-waitlist/internal/model"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 var (
@@ -15,8 +16,6 @@ var (
 	sizeRe       = regexp.MustCompile(`\d+`)
 )
 
-// notSet is the rank shown for a tenancy whose waiting-list position s.dk has
-// not calculated yet; it sorts after every lettered rank.
 const (
 	notSetDisplay = "Not set"
 	notSetOrder   = 99
@@ -25,9 +24,9 @@ const (
 // parseHTML extracts waitlist rows from the stitched s.dk building pages.
 //
 // The scraper wraps each building's ranking tables in a
-// <section class="sdk-building" data-name="...">. Every table row that the
-// applicant is signed up for carries a waiting-list category label (a letter
-// A–G, or "Not set" until s.dk calculates its position).
+// <section class="sdk-building" data-name="...">.
+// Every table row that the applicant is signed up for carries a waiting-list category label
+// (a letter A–G, or "Not set" until s.dk calculates its position).
 func parseHTML(htmlStr string) (*model.Result, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
@@ -50,9 +49,9 @@ func parseHTML(htmlStr string) (*model.Result, error) {
 	return &model.Result{Rows: rows}, nil
 }
 
-// parseRow turns one tenancy table row into a WaitlistRow. The presence of a
-// waiting-list-category label marks a tenancy the applicant joined; rows without
-// one (headers, or not-signed-up tenancies) are skipped.
+// parseRow turns one tenancy table row into a WaitlistRow.
+// The presence of a waiting-list-category label marks a tenancy the applicant joined;
+// rows without one (headers, or not-signed-up tenancies) are skipped.
 func parseRow(tr *goquery.Selection, dorm string) (model.WaitlistRow, bool) {
 	label := tr.Find(selRankCell).First()
 	if label.Length() == 0 {
@@ -60,7 +59,8 @@ func parseRow(tr *goquery.Selection, dorm string) (model.WaitlistRow, bool) {
 	}
 
 	link := tr.Find(`a[href*="/studiebolig/tenancy/"]`).First()
-	m := tenancyIDRe.FindStringSubmatch(link.AttrOr("href", ""))
+	href := link.AttrOr("href", "")
+	m := tenancyIDRe.FindStringSubmatch(href)
 	if m == nil {
 		return model.WaitlistRow{}, false
 	}
@@ -69,6 +69,7 @@ func parseRow(tr *goquery.Selection, dorm string) (model.WaitlistRow, bool) {
 	return model.WaitlistRow{
 		RequestID:   m[1],
 		Dorm:        dorm,
+		URL:         absoluteURL(href),
 		RoomType:    normalizeSpace(link.Text()),
 		Size:        sizeRe.FindString(tr.Find("td:has(sup)").First().Text()),
 		RankDisplay: display,
@@ -76,8 +77,19 @@ func parseRow(tr *goquery.Selection, dorm string) (model.WaitlistRow, bool) {
 	}, true
 }
 
-// rankFromLabel reads the rank from a waiting-list-category label: a letter span
-// when calculated, otherwise the "Not set" placeholder.
+// absoluteURL turns an s.dk tenancy href into a full URL.
+// Building and tenancy links render as site-relative paths,
+// so a relative href gets the baseURL host prepended;
+// an already-absolute href is returned unchanged.
+func absoluteURL(href string) string {
+	if href == "" || strings.HasPrefix(href, "http") {
+		return href
+	}
+	return baseURL + href
+}
+
+// rankFromLabel reads the rank from a waiting-list-category label:
+// a letter span when calculated, otherwise the "Not set" placeholder.
 func rankFromLabel(label *goquery.Selection) (string, int) {
 	if letter := rankLetterRe.FindString(label.Find(selRankLetter).First().Text()); letter != "" {
 		order, _ := rankOrder(letter)
@@ -90,9 +102,9 @@ func normalizeSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// rankOrder maps an s.dk rank to its sortable order (lower = better): a letter
-// category A=1…G=7, or "Not set" last. It is also reused to convert a stored
-// rank back to an order when diffing against the previous run.
+// rankOrder maps an s.dk rank to its sortable order (lower = better):
+// a letter category A=1…G=7, or "Not set" last.
+// It is also reused to convert a stored rank back to an order when diffing against the previous run.
 func rankOrder(display string) (int, bool) {
 	d := strings.TrimSpace(display)
 	if d == notSetDisplay {

@@ -1,6 +1,6 @@
-// Package source defines the pluggable crawl-source abstraction and a registry
-// of available sources. Each source fetches its own HTML and parses it into the
-// shared model; the downstream pipeline is source-agnostic.
+// Package source defines the pluggable crawl-source abstraction and a registry of available sources.
+// Each source fetches its own HTML and parses it into the shared model;
+// the downstream pipeline is source-agnostic.
 package source
 
 import (

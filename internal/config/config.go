@@ -15,15 +15,15 @@ const (
 	defaultOAuthTokenFile  = "./internal/config/token.json"
 	defaultConfigPath      = "internal/config/config.yaml"
 	defaultTimeoutSec      = 120
-	// sdk crawls one building detail page per signed-up property, so its run
-	// needs far longer than a single-page source.
+	// sdk crawls one building detail page per signed-up property,
+	// so its run needs far longer than a single-page source.
 	defaultSDKTimeoutSec = 600
 )
 
 // Config is the application configuration (YAML + optional env overrides).
 //
-// SMTP and Google are shared by every source (one mail sender, one Google
-// identity); Sources holds the per-source settings.
+// SMTP and Google are shared by every source (one mail sender, one Google identity);
+// Sources holds the per-source settings.
 type Config struct {
 	SMTP    SMTP    `yaml:"smtp"`
 	Google  Google  `yaml:"google"`
@@ -45,8 +45,8 @@ type Google struct {
 	OAuthTokenFile  string `yaml:"oauth_token_file"  env:"GOOGLE_OAUTH_TOKEN_FILE"`
 }
 
-// Sources holds one block per registered source. Adding a source adds a field
-// here plus a case in Source().
+// Sources holds one block per registered source.
+// Adding a source adds a field here plus a case in Source().
 type Sources struct {
 	KKIK KKIKConfig `yaml:"kkik"`
 	SDK  SDKConfig  `yaml:"sdk"`
@@ -57,8 +57,8 @@ type KKIKConfig struct {
 	Enabled bool        `yaml:"enabled"`
 	Steps   Steps       `yaml:"steps"`
 	Login   Credentials `yaml:"login"`
-	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to
-	// true. A plain bool with env-default:"true" would override a real false,
+	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to true.
+	// A plain bool with env-default:"true" would override a real false,
 	// since false is indistinguishable from the zero value.
 	Headless   *bool       `yaml:"headless"`
 	TimeoutSec int         `yaml:"timeout_sec" env:"KKIK_TIMEOUT_SEC" env-default:"120"`
@@ -68,8 +68,8 @@ type KKIKConfig struct {
 	DataDir    string      `yaml:"data_dir"`
 }
 
-// Credentials holds a source's login. Env tags are source-specific, so a new
-// source declares its own credentials type.
+// Credentials holds a source's login. Env tags are source-specific,
+// so a new source declares its own credentials type.
 type Credentials struct {
 	Email    string `yaml:"email"    env:"KKIK_EMAIL"`
 	Password string `yaml:"password" env:"KKIK_PASSWORD"`
@@ -80,8 +80,8 @@ type SDKConfig struct {
 	Enabled bool           `yaml:"enabled"`
 	Steps   Steps          `yaml:"steps"`
 	Login   SDKCredentials `yaml:"login"`
-	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to
-	// true. A plain bool with env-default:"true" would override a real false,
+	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to true.
+	// A plain bool with env-default:"true" would override a real false,
 	// since false is indistinguishable from the zero value.
 	Headless   *bool       `yaml:"headless"`
 	TimeoutSec int         `yaml:"timeout_sec" env:"SDK_TIMEOUT_SEC" env-default:"120"`
@@ -91,15 +91,15 @@ type SDKConfig struct {
 	DataDir    string      `yaml:"data_dir"`
 }
 
-// SDKCredentials holds s.dk's login. It declares its own env tags so they don't
-// collide with KKIK's.
+// SDKCredentials holds s.dk's login. It declares its own env tags
+// so they don't collide with KKIK's.
 type SDKCredentials struct {
 	Email    string `yaml:"email"    env:"SDK_EMAIL"`
 	Password string `yaml:"password" env:"SDK_PASSWORD"`
 }
 
-// Steps toggles a source's optional pipeline phases. Crawl (fetch + CSV) always
-// runs; email and sheet default to true when the block is omitted.
+// Steps toggles a source's optional pipeline phases. Crawl (fetch + CSV) always runs;
+// email and sheet default to true when the block is omitted.
 type Steps struct {
 	Email *bool `yaml:"email"`
 	Sheet *bool `yaml:"sheet"`
@@ -119,8 +119,8 @@ type EmailTarget struct {
 	To string `yaml:"to"`
 }
 
-// SourceSettings is the normalized, source-agnostic view the runner and source
-// factories consume. Per-source structs are projected onto it by Source().
+// SourceSettings is the normalized, source-agnostic view the runner and source factories consume.
+// Per-source structs are projected onto it by Source().
 type SourceSettings struct {
 	Name       string
 	Enabled    bool

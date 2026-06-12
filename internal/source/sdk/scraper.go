@@ -12,16 +12,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"housing-waitlist/internal/config"
+
+	"github.com/chromedp/chromedp"
 )
 
 const (
-	// buildingConcurrency caps how many building pages are crawled in parallel
-	// tabs of the shared browser.
+	// buildingConcurrency caps how many building pages
+	// are crawled in parallel tabs of the shared browser.
 	buildingConcurrency = 6
-	// buildingTimeout bounds a single building-page crawl so one stuck page
-	// cannot hold a worker indefinitely.
+	// buildingTimeout bounds a single building-page crawl
+	// so one stuck page cannot hold a worker indefinitely.
 	buildingTimeout = 90 * time.Second
 )
 
@@ -30,8 +31,8 @@ type scraper struct {
 	cfg config.SourceSettings
 }
 
-// building is one property the applicant is signed up for, taken from the home
-// list. Its detail page holds the per-tenancy waiting-list rankings.
+// building is one property the applicant is signed up for, taken from the home list.
+// Its detail page holds the per-tenancy waiting-list rankings.
 type building struct {
 	URL  string `json:"href"`
 	Name string `json:"name"`
@@ -41,10 +42,9 @@ type building struct {
 // fetchHTML logs in, lists every building the applicant is queued for, then
 // visits each building's detail page and collects its ranking tables.
 //
-// s.dk shows no rank on the home list; the per-tenancy "Ranking on the waiting
-// list" letter lives only on each building page. So the crawl fans out one
-// detail-page visit per building and stitches the ranking tables into a single
-// document that the parser walks section by section.
+// s.dk shows no rank on the home list; the per-tenancy "Ranking on the waiting list" letter
+// lives only on each building page. So the crawl fans out one detail-page visit per building
+// and stitches the ranking tables into a single document that the parser walks section by section.
 func (s *scraper) fetchHTML(ctx context.Context) (string, error) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", s.cfg.Headless),

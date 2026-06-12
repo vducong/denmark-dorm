@@ -47,6 +47,10 @@ func TestParse_ListHTML(t *testing.T) {
 	if first.RoomType == "" {
 		t.Error("first RoomType is empty")
 	}
+	wantURL := "https://www.kollegierneskontor.dk/default.aspx?func=kkikportal.roomtypedetails&arid=1788&kid=1783&lang=GB"
+	if first.URL != wantURL {
+		t.Errorf("first URL = %q, want %q", first.URL, wantURL)
+	}
 }
 
 func TestRankOrder(t *testing.T) {

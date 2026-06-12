@@ -7,7 +7,7 @@ import (
 )
 
 // CSVHeader is the column header row written to CSV and Google Sheets.
-var CSVHeader = []string{"request_id", "dorm", "room_type", "size_sqm", "your_rank", "diff"}
+var CSVHeader = []string{"request_id", "dorm", "url", "room_type", "size_sqm", "your_rank", "diff"}
 
 // Records returns CSV header plus sorted data rows as strings.
 // prevOrders maps request_id to RankOrder from the latest previous export;
@@ -20,6 +20,7 @@ func Records(rows []model.WaitlistRow, prevOrders map[string]int) [][]string {
 		out = append(out, []string{
 			row.RequestID,
 			row.Dorm,
+			row.URL,
 			row.RoomType,
 			row.Size,
 			row.RankDisplay,

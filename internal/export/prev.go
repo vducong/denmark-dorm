@@ -8,9 +8,9 @@ import (
 	"sort"
 )
 
-// LoadPrevRanks reads request_id → RankOrder from the latest *_waitlist.csv in
-// dir, converting each your_rank display value via rankOrder. Returns an empty
-// map when no previous files exist.
+// LoadPrevRanks reads request_id → RankOrder from the latest *_waitlist.csv in dir,
+// converting each your_rank display value via rankOrder.
+// Returns an empty map when no previous files exist.
 func LoadPrevRanks(dir string, rankOrder func(string) (int, bool)) (map[string]int, error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "*_waitlist.csv"))
 	if err != nil {

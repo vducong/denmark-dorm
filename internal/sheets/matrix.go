@@ -10,7 +10,7 @@ import (
 	"housing-waitlist/internal/model"
 )
 
-var baseHeader = []string{"request_id", "dorm", "room_type", "size_sqm"}
+var baseHeader = []string{"request_id", "dorm", "url", "room_type", "size_sqm"}
 
 const (
 	latestDiffHeader = "latest_diff"
@@ -20,17 +20,14 @@ const (
 type rowInfo struct {
 	requestID string
 	dorm      string
+	url       string
 	roomType  string
 	size      string
 	todayRank int
 	hasToday  bool
 }
 
-// BuildMatrix merges scrape data, CSV snapshots, and existing sheet values into
-// sheet rows. note is a source legend rendered as its own row beneath the
-// metadata row (blank when empty). rankOrder projects display ranks onto a
-// sortable scale for the latest_diff column, so numeric and letter ranks both
-// diff correctly.
+// BuildMatrix merges scrape data, CSV snapshots, and existing sheet values into sheet rows.
 func BuildMatrix(
 	rows []model.WaitlistRow,
 	snapshots []export.DailySnapshot,
@@ -101,14 +98,18 @@ func BuildMatrix(
 		}
 		diff := sheetDiff(todayHeader, dateHeaders, rankCells, rankOrder)
 
+		// latest_diff sits immediately after the base columns, then the dated rank columns;
+		// deriving the offsets from len(baseHeader) keeps these in step whenever a base column is added.
+		diffCol := len(baseHeader)
 		row := make([]any, len(header))
 		row[0] = info.requestID
 		row[1] = info.dorm
-		row[2] = info.roomType
-		row[3] = info.size
-		row[4] = diff
+		row[2] = info.url
+		row[3] = info.roomType
+		row[4] = info.size
+		row[diffCol] = diff
 		for i, dh := range dateHeaders {
-			row[5+i] = rankCells[dh]
+			row[diffCol+1+i] = rankCells[dh]
 		}
 		out = append(out, row)
 	}
@@ -126,8 +127,8 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 		rows:  map[string]map[string]string{},
 		ranks: map[string]map[string]string{},
 	}
-	// Locate the header row by content rather than a fixed index, so the parser
-	// survives layout shifts such as an added note row between metadata and header.
+	// Locate the header row by content rather than a fixed index,
+	// so the parser survives layout shifts such as an added note row between metadata and header.
 	headerRowIdx := -1
 	for i, row := range existing {
 		for _, cell := range row {
@@ -166,6 +167,12 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 	sortDateHeaders(dateHeaders)
 
 	for _, h := range baseHeader {
+		// url is a newer base column;
+		// sheets written before it existed are still valid and get url backfilled,
+		// so its absence must not void the parse.
+		if h == "url" {
+			continue
+		}
 		if _, ok := colIndex[h]; !ok {
 			return parsedSheet{rows: map[string]map[string]string{}, ranks: map[string]map[string]string{}}, legacy
 		}
@@ -185,8 +192,8 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 		}
 		base := make(map[string]string, len(baseHeader))
 		for _, h := range baseHeader {
-			if colIndex[h] < len(row) {
-				base[h] = fmt.Sprint(row[colIndex[h]])
+			if idx, ok := colIndex[h]; ok && idx < len(row) {
+				base[h] = fmt.Sprint(row[idx])
 			}
 		}
 		out.rows[id] = base
@@ -283,6 +290,7 @@ func buildRowInfo(
 		return rowInfo{
 			requestID: id,
 			dorm:      row.Dorm,
+			url:       row.URL,
 			roomType:  row.RoomType,
 			size:      row.Size,
 			todayRank: row.RankOrder,
@@ -295,6 +303,7 @@ func buildRowInfo(
 			return rowInfo{
 				requestID: id,
 				dorm:      row.Dorm,
+				url:       row.URL,
 				roomType:  row.RoomType,
 				size:      row.Size,
 			}
@@ -305,6 +314,7 @@ func buildRowInfo(
 		return rowInfo{
 			requestID: id,
 			dorm:      base["dorm"],
+			url:       base["url"],
 			roomType:  base["room_type"],
 			size:      base["size_sqm"],
 		}

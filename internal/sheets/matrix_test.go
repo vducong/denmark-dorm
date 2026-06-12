@@ -28,7 +28,7 @@ func TestBuildMatrix_backfillAndAppend(t *testing.T) {
 	}
 	today := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
 	rows := []model.WaitlistRow{
-		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
+		{RequestID: "a", Dorm: "D1", URL: "U1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
 	matrix, err := BuildMatrix(rows, snapshots, nil, today, "", numericOrder)
@@ -40,12 +40,12 @@ func TestBuildMatrix_backfillAndAppend(t *testing.T) {
 	}
 
 	header := matrix[2]
-	if header[4] != latestDiffHeader || header[5] != "260526" || header[6] != "090626" {
+	if header[2] != "url" || header[5] != latestDiffHeader || header[6] != "260526" || header[7] != "090626" {
 		t.Errorf("header = %v", header)
 	}
 
 	data := matrix[3]
-	if data[0] != "a" || data[4] != "+3" || data[5] != "25" || data[6] != "22" {
+	if data[0] != "a" || data[2] != "U1" || data[5] != "+3" || data[6] != "25" || data[7] != "22" {
 		t.Errorf("data row = %v", data)
 	}
 }
@@ -65,11 +65,11 @@ func TestBuildMatrix_sameDayUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	if matrix[3][4] != "" {
-		t.Errorf("latest_diff with single day = %v, want empty", matrix[3][4])
+	if matrix[3][5] != "" {
+		t.Errorf("latest_diff with single day = %v, want empty", matrix[3][5])
 	}
-	if matrix[3][5] != "22" {
-		t.Errorf("today rank = %v, want 22", matrix[3][5])
+	if matrix[3][6] != "22" {
+		t.Errorf("today rank = %v, want 22", matrix[3][6])
 	}
 }
 
@@ -96,10 +96,10 @@ func TestBuildMatrix_legacyMigration(t *testing.T) {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
 	header := matrix[2]
-	if header[4] != latestDiffHeader || header[5] != "260526" || header[6] != "090626" {
+	if header[5] != latestDiffHeader || header[6] != "260526" || header[7] != "090626" {
 		t.Errorf("header = %v", header)
 	}
-	if matrix[3][4] != "+3" || matrix[3][5] != "25" || matrix[3][6] != "22" {
+	if matrix[3][5] != "+3" || matrix[3][6] != "25" || matrix[3][7] != "22" {
 		t.Errorf("data row = %v", matrix[3])
 	}
 }

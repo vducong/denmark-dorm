@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"housing-waitlist/internal/model"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 var rankRe = regexp.MustCompile(`\d+`)
@@ -35,7 +36,9 @@ func parseHTML(html string) (*model.Result, error) {
 
 		requestID := findRequestID(row)
 		dorm := cleanText(row.Find("div.col-xs-8.col-md-3").First())
-		room := normalizeSpace(roomCell(row.Find("div.col-xs-8.col-md-4").First()))
+		roomSel := row.Find("div.col-xs-8.col-md-4").First()
+		room := normalizeSpace(roomCell(roomSel))
+		url := roomSel.Find("a").First().AttrOr("href", "")
 		size := cleanText(row.Find("div.col-xs-8.col-md-2").Eq(0))
 		rankText := cleanText(row.Find("div.col-xs-8.col-md-2").Eq(1))
 		order, ok := rankOrder(rankText)
@@ -46,6 +49,7 @@ func parseHTML(html string) (*model.Result, error) {
 		rows = append(rows, model.WaitlistRow{
 			RequestID:   requestID,
 			Dorm:        dorm,
+			URL:         absoluteURL(url),
 			RoomType:    room,
 			Size:        size,
 			RankDisplay: strconv.Itoa(order),
@@ -59,6 +63,16 @@ func parseHTML(html string) (*model.Result, error) {
 
 	res.Rows = rows
 	return res, nil
+}
+
+func absoluteURL(href string) string {
+	if href == "" || strings.HasPrefix(href, "http") {
+		return href
+	}
+	if !strings.HasPrefix(href, "/") {
+		href = "/" + href
+	}
+	return baseURL + href
 }
 
 func extractMeta(doc *goquery.Document) model.Meta {

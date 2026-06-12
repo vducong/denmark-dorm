@@ -64,6 +64,20 @@ func TestLoadDailySnapshots_metadata(t *testing.T) {
 	}
 }
 
+func TestLoadDailySnapshots_url(t *testing.T) {
+	dir := t.TempDir()
+	writeCSV(t, dir, "202605261338_waitlist.csv",
+		"request_id,dorm,url,room_type,size_sqm,your_rank\n10539078,Husumvej 106,https://example.test/x,Room,11 m2,25\n")
+
+	snaps, err := LoadDailySnapshots(dir)
+	if err != nil {
+		t.Fatalf("LoadDailySnapshots() err = %v", err)
+	}
+	if row := snaps[0].Rows["10539078"]; row.URL != "https://example.test/x" {
+		t.Errorf("row URL = %q, want https://example.test/x", row.URL)
+	}
+}
+
 func writeCSV(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := filepath.Join(dir, name)

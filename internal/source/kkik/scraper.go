@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"housing-waitlist/internal/config"
+
+	"github.com/chromedp/chromedp"
 )
 
 // scraper logs into KKIK and fetches the housing requests page HTML.
@@ -36,8 +37,8 @@ func (s *scraper) fetchHTML(ctx context.Context) (string, error) {
 	defer cancelRun()
 
 	var html string
-	// Login and housing are separate Run calls so the housing Navigate does not
-	// abort the ASP.NET login postback (net::ERR_ABORTED).
+	// Login and housing are separate Run calls
+	// so the housing Navigate does not abort the ASP.NET login postback (net::ERR_ABORTED).
 	err := chromedp.Run(runCtx,
 		chromedp.Navigate(loginURL),
 		chromedp.WaitVisible(selLoginUser, chromedp.ByQuery),
