@@ -86,7 +86,7 @@ func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings,
 			return err
 		}
 		slog.Info("updating sheet...", "source", s.Name)
-		sheetURL, err = sheets.Update(ctx, cfg.Google, s.Sheet, result.Rows, s.DataDir, src.RankOrder)
+		sheetURL, err = sheets.Update(ctx, cfg.Google, s.Sheet, result.Rows, s.DataDir, desc.Note, src.RankOrder)
 		if err != nil {
 			return fmt.Errorf("update sheet: %w", err)
 		}

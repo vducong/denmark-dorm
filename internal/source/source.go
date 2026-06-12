@@ -14,6 +14,7 @@ type Descriptor struct {
 	Name      string // machine key, e.g. "kkik"
 	Title     string // human title, e.g. "Kollegiernes Kontor"
 	PortalURL string // link embedded in the email body
+	Note      string // an optional one-line legend written under the sheet's metadata
 }
 
 // Source crawls one waitlist provider and parses it into the common model.

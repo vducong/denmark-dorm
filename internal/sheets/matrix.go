@@ -27,13 +27,16 @@ type rowInfo struct {
 }
 
 // BuildMatrix merges scrape data, CSV snapshots, and existing sheet values into
-// sheet rows. rankOrder projects display ranks onto a sortable scale for the
-// latest_diff column, so numeric and letter ranks both diff correctly.
+// sheet rows. note is a source legend rendered as its own row beneath the
+// metadata row (blank when empty). rankOrder projects display ranks onto a
+// sortable scale for the latest_diff column, so numeric and letter ranks both
+// diff correctly.
 func BuildMatrix(
 	rows []model.WaitlistRow,
 	snapshots []export.DailySnapshot,
 	existing [][]any,
 	today time.Time,
+	note string,
 	rankOrder func(string) (int, bool),
 ) ([][]any, error) {
 	todayHeader := export.DateHeader(today)
@@ -86,8 +89,9 @@ func BuildMatrix(
 		header = append(header, h)
 	}
 
-	out := make([][]any, 0, len(infos)+2)
+	out := make([][]any, 0, len(infos)+3)
 	out = append(out, []any{metaLabel, today.Format(time.RFC3339)})
+	out = append(out, []any{note})
 	out = append(out, header)
 
 	for _, info := range infos {
@@ -122,11 +126,25 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 		rows:  map[string]map[string]string{},
 		ranks: map[string]map[string]string{},
 	}
-	if len(existing) < 2 {
+	// Locate the header row by content rather than a fixed index, so the parser
+	// survives layout shifts such as an added note row between metadata and header.
+	headerRowIdx := -1
+	for i, row := range existing {
+		for _, cell := range row {
+			if fmt.Sprint(cell) == "request_id" {
+				headerRowIdx = i
+				break
+			}
+		}
+		if headerRowIdx >= 0 {
+			break
+		}
+	}
+	if headerRowIdx < 0 {
 		return out, false
 	}
 
-	headerRow := existing[1]
+	headerRow := existing[headerRowIdx]
 	if len(headerRow) == 0 {
 		return out, false
 	}
@@ -156,7 +174,7 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 		return parsedSheet{rows: map[string]map[string]string{}, ranks: map[string]map[string]string{}}, legacy
 	}
 
-	for r := 2; r < len(existing); r++ {
+	for r := headerRowIdx + 1; r < len(existing); r++ {
 		row := existing[r]
 		if len(row) == 0 {
 			continue

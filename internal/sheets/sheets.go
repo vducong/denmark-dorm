@@ -14,17 +14,19 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const headerRowIndex = 1 // 0-based; row 0 is "Last updated at" metadata
+const headerRowIndex = 2 // 0-based; row 0 is "Last updated at" metadata, row 1 is the note
 
 // Update merges scrape data into the target tab using time-series ddmmyy
 // columns. csvDir is the source's data dir scanned for historical snapshots;
-// rankOrder projects display ranks for the latest_diff column.
+// note is the source legend written under the metadata row; rankOrder projects
+// display ranks for the latest_diff column.
 func Update(
 	ctx context.Context,
 	google config.Google,
 	target config.SheetTarget,
 	rows []model.WaitlistRow,
 	csvDir string,
+	note string,
 	rankOrder func(string) (int, bool),
 ) (string, error) {
 	httpClient, err := client(ctx, google)
@@ -49,7 +51,7 @@ func Update(
 	}
 
 	now := time.Now()
-	values, err := BuildMatrix(rows, snapshots, resp.Values, now, rankOrder)
+	values, err := BuildMatrix(rows, snapshots, resp.Values, now, note, rankOrder)
 	if err != nil {
 		return "", err
 	}

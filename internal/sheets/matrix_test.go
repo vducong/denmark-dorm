@@ -31,20 +31,20 @@ func TestBuildMatrix_backfillAndAppend(t *testing.T) {
 		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, snapshots, nil, today, numericOrder)
+	matrix, err := BuildMatrix(rows, snapshots, nil, today, "", numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	if len(matrix) != 3 {
-		t.Fatalf("len(matrix) = %d, want 3", len(matrix))
+	if len(matrix) != 4 {
+		t.Fatalf("len(matrix) = %d, want 4", len(matrix))
 	}
 
-	header := matrix[1]
+	header := matrix[2]
 	if header[4] != latestDiffHeader || header[5] != "260526" || header[6] != "090626" {
 		t.Errorf("header = %v", header)
 	}
 
-	data := matrix[2]
+	data := matrix[3]
 	if data[0] != "a" || data[4] != "+3" || data[5] != "25" || data[6] != "22" {
 		t.Errorf("data row = %v", data)
 	}
@@ -61,15 +61,15 @@ func TestBuildMatrix_sameDayUpdate(t *testing.T) {
 		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, existing, today, numericOrder)
+	matrix, err := BuildMatrix(rows, nil, existing, today, "", numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	if matrix[2][4] != "" {
-		t.Errorf("latest_diff with single day = %v, want empty", matrix[2][4])
+	if matrix[3][4] != "" {
+		t.Errorf("latest_diff with single day = %v, want empty", matrix[3][4])
 	}
-	if matrix[2][5] != "22" {
-		t.Errorf("today rank = %v, want 22", matrix[2][5])
+	if matrix[3][5] != "22" {
+		t.Errorf("today rank = %v, want 22", matrix[3][5])
 	}
 }
 
@@ -91,16 +91,16 @@ func TestBuildMatrix_legacyMigration(t *testing.T) {
 		{RequestID: "a", Dorm: "D1", RoomType: "R1", Size: "S1", RankDisplay: "22", RankOrder: 22},
 	}
 
-	matrix, err := BuildMatrix(rows, snapshots, existing, today, numericOrder)
+	matrix, err := BuildMatrix(rows, snapshots, existing, today, "", numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	header := matrix[1]
+	header := matrix[2]
 	if header[4] != latestDiffHeader || header[5] != "260526" || header[6] != "090626" {
 		t.Errorf("header = %v", header)
 	}
-	if matrix[2][4] != "+3" || matrix[2][5] != "25" || matrix[2][6] != "22" {
-		t.Errorf("data row = %v", matrix[2])
+	if matrix[3][4] != "+3" || matrix[3][5] != "25" || matrix[3][6] != "22" {
+		t.Errorf("data row = %v", matrix[3])
 	}
 }
 
@@ -111,12 +111,12 @@ func TestBuildMatrix_sortedByTodayRank(t *testing.T) {
 		{RequestID: "a", Dorm: "D1", RankDisplay: "5", RankOrder: 5},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, nil, today, numericOrder)
+	matrix, err := BuildMatrix(rows, nil, nil, today, "", numericOrder)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}
-	if matrix[2][0] != "a" || matrix[3][0] != "b" {
-		t.Errorf("row order = %v then %v", matrix[2][0], matrix[3][0])
+	if matrix[3][0] != "a" || matrix[4][0] != "b" {
+		t.Errorf("row order = %v then %v", matrix[3][0], matrix[4][0])
 	}
 }
 

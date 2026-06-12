@@ -34,6 +34,7 @@ func (s *SDK) Descriptor() source.Descriptor {
 		Name:      "sdk",
 		Title:     "s.dk",
 		PortalURL: listURL,
+		Note:      "A: 1-10, B: 11-40, C: 41-100, D: 101-200, E: 201-400, F: 401-1000, G: 1001-",
 	}
 }
 
