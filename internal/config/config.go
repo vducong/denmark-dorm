@@ -15,6 +15,9 @@ const (
 	defaultOAuthTokenFile  = "./internal/config/token.json"
 	defaultConfigPath      = "internal/config/config.yaml"
 	defaultTimeoutSec      = 120
+	// sdk crawls one building detail page per signed-up property, so its run
+	// needs far longer than a single-page source.
+	defaultSDKTimeoutSec = 600
 )
 
 // Config is the application configuration (YAML + optional env overrides).
@@ -46,6 +49,7 @@ type Google struct {
 // here plus a case in Source().
 type Sources struct {
 	KKIK KKIKConfig `yaml:"kkik"`
+	SDK  SDKConfig  `yaml:"sdk"`
 }
 
 // KKIKConfig holds the KKIK (kollegierneskontor.dk) source settings.
@@ -69,6 +73,29 @@ type KKIKConfig struct {
 type Credentials struct {
 	Email    string `yaml:"email"    env:"KKIK_EMAIL"`
 	Password string `yaml:"password" env:"KKIK_PASSWORD"`
+}
+
+// SDKConfig holds the s.dk (mit.s.dk/studiebolig) source settings.
+type SDKConfig struct {
+	Enabled bool           `yaml:"enabled"`
+	Steps   Steps          `yaml:"steps"`
+	Login   SDKCredentials `yaml:"login"`
+	// Headless is a pointer so a YAML false is honored; nil (omitted) defaults to
+	// true. A plain bool with env-default:"true" would override a real false,
+	// since false is indistinguishable from the zero value.
+	Headless   *bool       `yaml:"headless"`
+	TimeoutSec int         `yaml:"timeout_sec" env:"SDK_TIMEOUT_SEC" env-default:"120"`
+	DebugDir   string      `yaml:"debug_dir"   env:"SDK_DEBUG_DIR"`
+	Sheet      SheetTarget `yaml:"sheet"`
+	Email      EmailTarget `yaml:"email"`
+	DataDir    string      `yaml:"data_dir"`
+}
+
+// SDKCredentials holds s.dk's login. It declares its own env tags so they don't
+// collide with KKIK's.
+type SDKCredentials struct {
+	Email    string `yaml:"email"    env:"SDK_EMAIL"`
+	Password string `yaml:"password" env:"SDK_PASSWORD"`
 }
 
 // Steps toggles a source's optional pipeline phases. Crawl (fetch + CSV) always
@@ -136,6 +163,12 @@ func (c *Config) applyDefaults() {
 	if c.Sources.KKIK.Sheet.SheetName == "" {
 		c.Sources.KKIK.Sheet.SheetName = defaultSheetName
 	}
+	if c.Sources.SDK.TimeoutSec <= 0 {
+		c.Sources.SDK.TimeoutSec = defaultSDKTimeoutSec
+	}
+	if c.Sources.SDK.Sheet.SheetName == "" {
+		c.Sources.SDK.Sheet.SheetName = defaultSheetName
+	}
 }
 
 // Source returns the normalized settings for a registered source name.
@@ -143,6 +176,8 @@ func (c *Config) Source(name string) (SourceSettings, bool) {
 	switch name {
 	case "kkik":
 		return c.Sources.KKIK.settings("kkik"), true
+	case "sdk":
+		return c.Sources.SDK.settings("sdk"), true
 	default:
 		return SourceSettings{}, false
 	}
@@ -161,7 +196,7 @@ func (c *Config) EnabledSources() []SourceSettings {
 
 // SourceNames lists every source known to config (independent of the registry).
 func SourceNames() []string {
-	return []string{"kkik"}
+	return []string{"kkik", "sdk"}
 }
 
 func (k KKIKConfig) settings(name string) SourceSettings {
@@ -189,6 +224,35 @@ func (k KKIKConfig) settings(name string) SourceSettings {
 		DebugDir:   k.DebugDir,
 		Sheet:      sheet,
 		EmailTo:    k.Email.To,
+		DataDir:    dataDir,
+	}
+}
+
+func (s SDKConfig) settings(name string) SourceSettings {
+	dataDir := s.DataDir
+	if dataDir == "" {
+		dataDir = filepath.Join("data", name)
+	}
+	timeout := s.TimeoutSec
+	if timeout <= 0 {
+		timeout = defaultTimeoutSec
+	}
+	sheet := s.Sheet
+	if sheet.SheetName == "" {
+		sheet.SheetName = defaultSheetName
+	}
+	headless := s.Headless == nil || *s.Headless
+	return SourceSettings{
+		Name:       name,
+		Enabled:    s.Enabled,
+		EmailStep:  s.Steps.email(),
+		SheetStep:  s.Steps.sheet(),
+		Login:      Credentials{Email: s.Login.Email, Password: s.Login.Password},
+		Headless:   headless,
+		TimeoutSec: timeout,
+		DebugDir:   s.DebugDir,
+		Sheet:      sheet,
+		EmailTo:    s.Email.To,
 		DataDir:    dataDir,
 	}
 }

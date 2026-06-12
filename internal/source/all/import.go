@@ -4,4 +4,5 @@ package all
 
 import (
 	_ "housing-waitlist/internal/source/kkik"
+	_ "housing-waitlist/internal/source/sdk"
 )
