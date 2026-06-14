@@ -113,3 +113,24 @@ func TestBuildMessage_multipleAttachments(t *testing.T) {
 		t.Error("missing To header")
 	}
 }
+
+func TestBuildMessage_ccHeader(t *testing.T) {
+	sections := sampleSections(t)
+	cfg := config.SMTP{From: "from@example.com", Cc: "one@example.com, two@example.com"}
+	msg, err := buildMessage(cfg, "to@example.com", "subject", sections)
+	if err != nil {
+		t.Fatalf("buildMessage: %v", err)
+	}
+	if !strings.Contains(string(msg), "Cc: one@example.com, two@example.com") {
+		t.Errorf("missing or malformed Cc header:\n%s", msg)
+	}
+
+	// No Cc configured → no Cc header at all.
+	msg, err = buildMessage(config.SMTP{From: "from@example.com"}, "to@example.com", "subject", sections)
+	if err != nil {
+		t.Fatalf("buildMessage: %v", err)
+	}
+	if strings.Contains(string(msg), "Cc:") {
+		t.Errorf("unexpected Cc header when none configured:\n%s", msg)
+	}
+}

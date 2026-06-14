@@ -41,6 +41,7 @@ type Config struct {
 //
 // To is global rather than per-source: every enabled source's section ships in
 // one digest to this address, so the recipient is a shared concern like From.
+// Cc is optional and may list several comma-separated addresses.
 type SMTP struct {
 	Host     string `yaml:"host"     env:"SMTP_HOST"`
 	Port     int    `yaml:"port"     env:"SMTP_PORT" env-default:"587"`
@@ -48,6 +49,7 @@ type SMTP struct {
 	Password string `yaml:"password" env:"SMTP_PASSWORD"`
 	From     string `yaml:"from"     env:"SMTP_FROM"`
 	To       string `yaml:"to"       env:"SMTP_TO"`
+	Cc       string `yaml:"cc"       env:"SMTP_CC"`
 }
 
 // Google holds the shared OAuth identity used for Google Sheets.

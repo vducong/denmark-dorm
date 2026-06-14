@@ -92,6 +92,11 @@ func sendSMTP(cfg config.SMTP, to string, msg []byte) error {
 	if err := client.Rcpt(to); err != nil {
 		return err
 	}
+	for _, cc := range ccAddrs(cfg) {
+		if err := client.Rcpt(cc); err != nil {
+			return err
+		}
+	}
 	w, err := client.Data()
 	if err != nil {
 		return err
@@ -161,6 +166,9 @@ func buildMessage(cfg config.SMTP, to, subject string, sections []Section) ([]by
 	h := make(map[string][]string)
 	h["From"] = []string{cfg.From}
 	h["To"] = []string{to}
+	if cc := ccAddrs(cfg); len(cc) > 0 {
+		h["Cc"] = []string{strings.Join(cc, ", ")}
+	}
 	h["Subject"] = []string{subject}
 	h["MIME-Version"] = []string{"1.0"}
 	h["Content-Type"] = []string{fmt.Sprintf("multipart/mixed; boundary=%s", w.Boundary())}
@@ -245,6 +253,22 @@ func commuteSummary(row model.WaitlistRow, dests []string) string {
 		parts = append(parts, fmt.Sprintf("%s transit %s / walk %s min", d, t, w))
 	}
 	return "[" + strings.Join(parts, " · ") + "]"
+}
+
+// ccAddrs splits the configured Cc value into individual addresses, trimming
+// whitespace and dropping empties, so it works for one address or a
+// comma-separated list.
+func ccAddrs(cfg config.SMTP) []string {
+	if strings.TrimSpace(cfg.Cc) == "" {
+		return nil
+	}
+	var out []string
+	for _, a := range strings.Split(cfg.Cc, ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func orDash(s string) string {

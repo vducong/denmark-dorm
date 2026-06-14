@@ -2,11 +2,12 @@
 # Override file path: CONFIG_PATH=/path/to/config.yaml
 
 # Shared mail transport / sender / recipient. Secrets may come from env:
-#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TO
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TO, SMTP_CC
 # All enabled sources are combined into ONE email sent to `to`.
 smtp:
   from: you@example.com
   to: you@example.com   # single recipient for the combined report
+  cc: ""                # optional; comma-separated for multiple addresses
   host: smtp.gmail.com
   port: 587
   user: you@example.com
