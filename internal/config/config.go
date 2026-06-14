@@ -18,6 +18,12 @@ const (
 	// sdk crawls one building detail page per signed-up property,
 	// so its run needs far longer than a single-page source.
 	defaultSDKTimeoutSec = 600
+
+	// Commute defaults: routing backend, then arrive before the first class and
+	// leave at the worst case.
+	defaultCommuteProvider = "google"
+	defaultArriveBy        = "08:00"
+	defaultDepartAt        = "17:00"
 )
 
 // Config is the application configuration (YAML + optional env overrides).
@@ -27,6 +33,7 @@ const (
 type Config struct {
 	SMTP    SMTP    `yaml:"smtp"`
 	Google  Google  `yaml:"google"`
+	Commute Commute `yaml:"commute"`
 	Sources Sources `yaml:"sources"`
 }
 
@@ -47,6 +54,32 @@ type SMTP struct {
 type Google struct {
 	OAuthClientFile string `yaml:"oauth_client_file" env:"GOOGLE_OAUTH_CLIENT_FILE"`
 	OAuthTokenFile  string `yaml:"oauth_token_file"  env:"GOOGLE_OAUTH_TOKEN_FILE"`
+}
+
+// Commute holds the shared commute-time settings. It is shared across sources;
+// each (origin, destination, time-window) is routed once and cached to disk, so
+// the backend is hit only on a cache miss.
+//
+// Provider selects the routing backend (pluggable; "google" by default — see
+// internal/commute). ArriveBy/DepartAt are local times of day ("HH:MM",
+// Europe/Copenhagen); the runner resolves them to the next weekday so transit
+// estimates use a stable rush-hour baseline. Destinations is a configurable list
+// of campuses, each producing its own <name>_* columns.
+type Commute struct {
+	Enabled       bool                 `yaml:"enabled"`
+	Provider      string               `yaml:"provider" env:"COMMUTE_PROVIDER"`
+	APIKey        string               `yaml:"api_key" env:"COMMUTE_API_KEY"`
+	ArriveBy      string               `yaml:"arrive_by"`
+	DepartAt      string               `yaml:"depart_at"`
+	CachePath     string               `yaml:"cache_path"`
+	Destinations  []CommuteDestination `yaml:"destinations"`
+	DormAddresses map[string]string    `yaml:"dorm_addresses"`
+}
+
+// CommuteDestination is one campus to route to. Name prefixes its columns.
+type CommuteDestination struct {
+	Name    string `yaml:"name"`
+	Address string `yaml:"address"`
 }
 
 // Sources holds one block per registered source.
@@ -164,6 +197,18 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Sources.SDK.Sheet.SheetName == "" {
 		c.Sources.SDK.Sheet.SheetName = defaultSheetName
+	}
+	if c.Commute.Provider == "" {
+		c.Commute.Provider = defaultCommuteProvider
+	}
+	if c.Commute.ArriveBy == "" {
+		c.Commute.ArriveBy = defaultArriveBy
+	}
+	if c.Commute.DepartAt == "" {
+		c.Commute.DepartAt = defaultDepartAt
+	}
+	if c.Commute.CachePath == "" {
+		c.Commute.CachePath = filepath.Join("data", "commute_cache.json")
 	}
 }
 
@@ -320,6 +365,29 @@ func (c *Config) ValidateGoogleToken() error {
 	}
 	if _, err := os.Stat(c.Google.OAuthTokenFile); err != nil {
 		return fmt.Errorf("google oauth token missing at %s (run with --auth-sheets)", c.Google.OAuthTokenFile)
+	}
+	return nil
+}
+
+// ValidateCommute checks the settings required to call the Routes API. It is
+// only enforced when commute is enabled; a disabled block is always valid.
+func (c *Config) ValidateCommute() error {
+	if c.Commute.APIKey == "" {
+		return fmt.Errorf("commute.api_key is required (or COMMUTE_API_KEY)")
+	}
+	if len(c.Commute.Destinations) == 0 {
+		return fmt.Errorf("commute.destinations must list at least one campus")
+	}
+	for i, d := range c.Commute.Destinations {
+		if d.Name == "" || d.Address == "" {
+			return fmt.Errorf("commute.destinations[%d]: name and address are required", i)
+		}
+	}
+	if _, err := time.Parse("15:04", c.Commute.ArriveBy); err != nil {
+		return fmt.Errorf("commute.arrive_by %q must be HH:MM", c.Commute.ArriveBy)
+	}
+	if _, err := time.Parse("15:04", c.Commute.DepartAt); err != nil {
+		return fmt.Errorf("commute.depart_at %q must be HH:MM", c.Commute.DepartAt)
 	}
 	return nil
 }

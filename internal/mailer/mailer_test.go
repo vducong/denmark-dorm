@@ -66,6 +66,33 @@ func TestBuildDigestBody_multipleSections(t *testing.T) {
 	}
 }
 
+func TestWriteSection_commuteSummary(t *testing.T) {
+	dir := t.TempDir()
+	csv := filepath.Join(dir, "202606130012_waitlist.csv")
+	if err := os.WriteFile(csv, []byte("request_id,dorm\n1,X\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sections := []Section{{
+		Name:    "sdk",
+		Title:   "s.dk",
+		Dests:   []string{"cbs", "rda"},
+		CSVPath: csv,
+		Result: &model.Result{Rows: []model.WaitlistRow{
+			{RequestID: "1", Dorm: "Nørrebro", RoomType: "Room", RankDisplay: "B", RankOrder: 2,
+				Commute: map[string]string{
+					"cbs_transit_morning_min": "28", "cbs_walk_min": "44",
+					"rda_transit_morning_min": "", "rda_walk_min": "70",
+				}},
+		}},
+	}}
+	body := buildDigestBody(sections)
+	for _, want := range []string{"cbs transit 28 / walk 44 min", "rda transit – / walk 70 min"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("digest body missing %q\n%s", want, body)
+		}
+	}
+}
+
 func TestBuildMessage_multipleAttachments(t *testing.T) {
 	sections := sampleSections(t)
 	msg, err := buildMessage(config.SMTP{From: "from@example.com"}, "to@example.com", "subject", sections)

@@ -149,6 +149,41 @@ func TestValidateGoogleToken_missing(t *testing.T) {
 	}
 }
 
+func TestValidateCommute(t *testing.T) {
+	c := &Config{}
+	c.applyDefaults() // fills arrive_by/depart_at so format checks pass
+	if err := c.ValidateCommute(); err == nil {
+		t.Fatal("expected error for missing api_key")
+	}
+	c.Commute.APIKey = "k"
+	if err := c.ValidateCommute(); err == nil {
+		t.Fatal("expected error for empty destinations")
+	}
+	c.Commute.Destinations = []CommuteDestination{{Name: "cbs"}}
+	if err := c.ValidateCommute(); err == nil {
+		t.Fatal("expected error for destination missing address")
+	}
+	c.Commute.Destinations = []CommuteDestination{{Name: "cbs", Address: "Solbjerg Plads 3"}}
+	if err := c.ValidateCommute(); err != nil {
+		t.Fatalf("ValidateCommute: %v", err)
+	}
+	c.Commute.ArriveBy = "8am"
+	if err := c.ValidateCommute(); err == nil {
+		t.Fatal("expected error for non-HH:MM arrive_by")
+	}
+}
+
+func TestCommuteDefaults(t *testing.T) {
+	c := &Config{}
+	c.applyDefaults()
+	if c.Commute.ArriveBy != defaultArriveBy || c.Commute.DepartAt != defaultDepartAt {
+		t.Errorf("commute time defaults = %q / %q", c.Commute.ArriveBy, c.Commute.DepartAt)
+	}
+	if c.Commute.CachePath != filepath.Join("data", "commute_cache.json") {
+		t.Errorf("cache path default = %q", c.Commute.CachePath)
+	}
+}
+
 func TestValidateSMTP(t *testing.T) {
 	cfg := &Config{}
 	if err := cfg.ValidateSMTP(); err == nil {

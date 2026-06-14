@@ -9,6 +9,13 @@ package model
 // and is what lands in the your_rank column.
 // RankOrder is the same rank projected onto a sortable scale where lower is better;
 // sorting and diffing run on it so both numeric and letter ranks work.
+//
+// Address is the street address used for commute estimation.
+// Sources that expose one set it directly (s.dk);
+// for sources that only have a dorm name (KKIK) the commute resolver fills it from config.
+// Commute maps a commute column name (e.g. "cbs_transit_morning_min") to its
+// value in whole minutes, or "" when unknown; it is always read through the
+// pipeline's ordered column list, so iteration order never depends on the map.
 type WaitlistRow struct {
 	RequestID   string
 	Dorm        string
@@ -17,6 +24,8 @@ type WaitlistRow struct {
 	Size        string
 	RankDisplay string
 	RankOrder   int
+	Address     string
+	Commute     map[string]string
 }
 
 // Result is the parsed page content for one source.

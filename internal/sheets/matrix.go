@@ -10,7 +10,17 @@ import (
 	"housing-waitlist/internal/model"
 )
 
-var baseHeader = []string{"request_id", "dorm", "url", "room_type", "size_sqm"}
+// coreBase are the always-present base columns. The config-driven commute
+// columns are appended after these to form a run's full base header.
+var coreBase = []string{"request_id", "dorm", "url", "room_type", "size_sqm"}
+
+// requiredBaseCols must be present in an existing sheet for its dated history to
+// be trusted. url and commute columns are newer/optional: a sheet written before
+// they existed is still valid and gets them backfilled, so their absence must
+// NOT void the parse (this guard is what keeps a column-add migration safe).
+var requiredBaseCols = map[string]bool{
+	"request_id": true, "dorm": true, "room_type": true, "size_sqm": true,
+}
 
 const (
 	latestDiffHeader = "latest_diff"
@@ -23,6 +33,7 @@ type rowInfo struct {
 	url       string
 	roomType  string
 	size      string
+	commute   map[string]string // commute column name -> value
 	todayRank int
 	hasToday  bool
 }
@@ -35,7 +46,11 @@ func BuildMatrix(
 	today time.Time,
 	note string,
 	rankOrder func(string) (int, bool),
+	commuteCols []string,
 ) ([][]any, error) {
+	// baseCols is the run's full base header: the always-present core columns
+	// followed by the config-driven commute columns.
+	baseCols := append(append([]string{}, coreBase...), commuteCols...)
 	todayHeader := export.DateHeader(today)
 	scrapeByID := make(map[string]model.WaitlistRow, len(rows))
 	for _, row := range rows {
@@ -47,7 +62,7 @@ func BuildMatrix(
 		snapshotByHeader[snap.DateHeader] = snap
 	}
 
-	existingSheet, legacy := parseExistingSheet(existing)
+	existingSheet, legacy := parseExistingSheet(existing, baseCols)
 
 	dateHeaders := mergeDateHeaders(existingSheet.dateHeaders, snapshots, todayHeader, legacy)
 	if len(dateHeaders) == 0 {
@@ -61,7 +76,7 @@ func BuildMatrix(
 
 	infos := make([]rowInfo, 0, len(ids))
 	for _, id := range ids {
-		info := buildRowInfo(id, scrapeByID, snapshots, existingSheet.rows)
+		info := buildRowInfo(id, scrapeByID, snapshots, existingSheet.rows, commuteCols)
 		infos = append(infos, info)
 	}
 	sort.Slice(infos, func(i, j int) bool {
@@ -77,8 +92,8 @@ func BuildMatrix(
 		return infos[i].requestID < infos[j].requestID
 	})
 
-	header := make([]any, 0, len(baseHeader)+1+len(dateHeaders))
-	for _, h := range baseHeader {
+	header := make([]any, 0, len(baseCols)+1+len(dateHeaders))
+	for _, h := range baseCols {
 		header = append(header, h)
 	}
 	header = append(header, latestDiffHeader)
@@ -99,14 +114,17 @@ func BuildMatrix(
 		diff := sheetDiff(todayHeader, dateHeaders, rankCells, rankOrder)
 
 		// latest_diff sits immediately after the base columns, then the dated rank columns;
-		// deriving the offsets from len(baseHeader) keeps these in step whenever a base column is added.
-		diffCol := len(baseHeader)
+		// deriving the offsets from len(baseCols) keeps these in step whenever a base column is added.
+		diffCol := len(baseCols)
 		row := make([]any, len(header))
 		row[0] = info.requestID
 		row[1] = info.dorm
 		row[2] = info.url
 		row[3] = info.roomType
 		row[4] = info.size
+		for i, col := range commuteCols {
+			row[len(coreBase)+i] = info.commute[col]
+		}
 		row[diffCol] = diff
 		for i, dh := range dateHeaders {
 			row[diffCol+1+i] = rankCells[dh]
@@ -122,7 +140,7 @@ type parsedSheet struct {
 	ranks       map[string]map[string]string // request_id -> dateHeader -> rank string
 }
 
-func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
+func parseExistingSheet(existing [][]any, baseCols []string) (parsedSheet, bool) {
 	out := parsedSheet{
 		rows:  map[string]map[string]string{},
 		ranks: map[string]map[string]string{},
@@ -166,19 +184,16 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 	}
 	sortDateHeaders(dateHeaders)
 
-	for _, h := range baseHeader {
-		// url is a newer base column;
-		// sheets written before it existed are still valid and get url backfilled,
-		// so its absence must not void the parse.
-		if h == "url" {
+	for _, h := range baseCols {
+		// Only a missing REQUIRED column means the sheet is unrecognizable and the
+		// history must be discarded. url and commute columns are newer/optional, so
+		// older sheets that predate them parse normally and get them backfilled.
+		if !requiredBaseCols[h] {
 			continue
 		}
 		if _, ok := colIndex[h]; !ok {
 			return parsedSheet{rows: map[string]map[string]string{}, ranks: map[string]map[string]string{}}, legacy
 		}
-	}
-	if _, ok := colIndex["request_id"]; !ok {
-		return parsedSheet{rows: map[string]map[string]string{}, ranks: map[string]map[string]string{}}, legacy
 	}
 
 	for r := headerRowIdx + 1; r < len(existing); r++ {
@@ -190,8 +205,8 @@ func parseExistingSheet(existing [][]any) (parsedSheet, bool) {
 		if id == "" {
 			continue
 		}
-		base := make(map[string]string, len(baseHeader))
-		for _, h := range baseHeader {
+		base := make(map[string]string, len(baseCols))
+		for _, h := range baseCols {
 			if idx, ok := colIndex[h]; ok && idx < len(row) {
 				base[h] = fmt.Sprint(row[idx])
 			}
@@ -285,6 +300,7 @@ func buildRowInfo(
 	scrape map[string]model.WaitlistRow,
 	snapshots []export.DailySnapshot,
 	existingRows map[string]map[string]string,
+	commuteCols []string,
 ) rowInfo {
 	if row, ok := scrape[id]; ok {
 		return rowInfo{
@@ -293,6 +309,7 @@ func buildRowInfo(
 			url:       row.URL,
 			roomType:  row.RoomType,
 			size:      row.Size,
+			commute:   row.Commute,
 			todayRank: row.RankOrder,
 			hasToday:  true,
 		}
@@ -306,6 +323,7 @@ func buildRowInfo(
 				url:       row.URL,
 				roomType:  row.RoomType,
 				size:      row.Size,
+				commute:   row.Commute,
 			}
 		}
 	}
@@ -317,10 +335,26 @@ func buildRowInfo(
 			url:       base["url"],
 			roomType:  base["room_type"],
 			size:      base["size_sqm"],
+			commute:   commuteFromBase(base, commuteCols),
 		}
 	}
 
 	return rowInfo{requestID: id}
+}
+
+// commuteFromBase pulls the commute columns out of an existing sheet row, so a
+// row no longer in the live scrape keeps the commute values already on the sheet.
+func commuteFromBase(base map[string]string, commuteCols []string) map[string]string {
+	if len(commuteCols) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(commuteCols))
+	for _, col := range commuteCols {
+		if v := base[col]; v != "" {
+			out[col] = v
+		}
+	}
+	return out
 }
 
 func rankForDate(

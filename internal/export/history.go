@@ -14,6 +14,13 @@ import (
 
 var waitlistCSVName = regexp.MustCompile(`^(\d{8})\d{4}_waitlist\.csv$`)
 
+// fixedCSVCols are the non-commute columns; any other column in a history CSV is
+// a commute column and is round-tripped into WaitlistRow.Commute by name.
+var fixedCSVCols = map[string]bool{
+	"request_id": true, "dorm": true, "url": true, "room_type": true,
+	"size_sqm": true, "your_rank": true, "diff": true,
+}
+
 // DailySnapshot holds display ranks and row metadata for one calendar day.
 type DailySnapshot struct {
 	DateHeader string
@@ -150,6 +157,17 @@ func loadSnapshotFromCSV(path, dayKey string) (DailySnapshot, error) {
 		}
 		if sizeIdx >= 0 && len(rec) > sizeIdx {
 			row.Size = rec[sizeIdx]
+		}
+		// Carry any commute columns (those past the fixed set) so a prior day's
+		// values survive into the sheet even when the dorm isn't in today's scrape.
+		for i, col := range header {
+			if fixedCSVCols[col] || i >= len(rec) || rec[i] == "" {
+				continue
+			}
+			if row.Commute == nil {
+				row.Commute = map[string]string{}
+			}
+			row.Commute[col] = rec[i]
 		}
 		rows[id] = row
 	}

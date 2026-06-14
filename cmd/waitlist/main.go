@@ -8,6 +8,10 @@ import (
 	"os"
 	"strings"
 
+	// Embed the timezone database so commute time-of-day resolution to
+	// Europe/Copenhagen works even on systems without system tzdata.
+	_ "time/tzdata"
+
 	"housing-waitlist/internal/config"
 	"housing-waitlist/internal/runner"
 	"housing-waitlist/internal/sheets"

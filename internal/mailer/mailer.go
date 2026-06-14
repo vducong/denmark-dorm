@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"housing-waitlist/internal/commute"
 	"housing-waitlist/internal/config"
 	"housing-waitlist/internal/export"
 	"housing-waitlist/internal/model"
@@ -25,9 +26,10 @@ import (
 // Section is one source's contribution to the combined report: its labels,
 // parsed rows, CSV attachment, and (optional) live sheet link.
 type Section struct {
-	Name      string // source token, e.g. "kkik"; prefixes the CSV attachment filename
-	Title     string // source title, e.g. "KKIK"
-	PortalURL string // source portal link
+	Name      string   // source token, e.g. "kkik"; prefixes the CSV attachment filename
+	Title     string   // source title, e.g. "KKIK"
+	PortalURL string   // source portal link
+	Dests     []string // commute destination names, in order (empty when commute off)
 	Result    *model.Result
 	CSVPath   string
 	SheetURL  string
@@ -137,6 +139,9 @@ func writeSection(b *strings.Builder, s Section) {
 	for i := 0; i < limit; i++ {
 		row := sorted[i]
 		line := fmt.Sprintf("%d. #%s — %s — %s", i+1, row.RankDisplay, row.Dorm, truncate(row.RoomType, 60))
+		if c := commuteSummary(row, s.Dests); c != "" {
+			line += "  " + c
+		}
 		fmt.Fprintf(b, `%s<br>`, html.EscapeString(line))
 	}
 	fmt.Fprint(b, `</p>`)
@@ -223,6 +228,30 @@ func writeHeaders(buf *bytes.Buffer, h map[string][]string) error {
 	}
 	_, err := buf.WriteString("\r\n")
 	return err
+}
+
+// commuteSummary renders a row's per-campus headline for the email: morning
+// transit and walk minutes for each destination. The full set (including the
+// evening leg) lives in the CSV and Sheet; the email stays terse. Empty when the
+// row has no commute data.
+func commuteSummary(row model.WaitlistRow, dests []string) string {
+	if len(row.Commute) == 0 || len(dests) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(dests))
+	for _, d := range dests {
+		t := orDash(row.Commute[commute.TransitMorningCol(d)])
+		w := orDash(row.Commute[commute.WalkCol(d)])
+		parts = append(parts, fmt.Sprintf("%s transit %s / walk %s min", d, t, w))
+	}
+	return "[" + strings.Join(parts, " · ") + "]"
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "–"
+	}
+	return s
 }
 
 func truncate(s string, max int) string {

@@ -13,7 +13,7 @@ func TestBuildMatrix_metadataRow(t *testing.T) {
 		{RequestID: "1", Dorm: "D", RankDisplay: "3", RankOrder: 3},
 	}
 
-	matrix, err := BuildMatrix(rows, nil, nil, today, "band legend", numericOrder)
+	matrix, err := BuildMatrix(rows, nil, nil, today, "band legend", numericOrder, nil)
 	if err != nil {
 		t.Fatalf("BuildMatrix() err = %v", err)
 	}

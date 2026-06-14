@@ -28,3 +28,12 @@ type Source interface {
 	// It is reused to convert previous CSV ranks back to an order for diffing.
 	RankOrder(display string) (int, bool)
 }
+
+// AddressResolver is an optional capability for sources whose rows carry only a
+// name + detail-page URL (not a street address). The commute step uses it to
+// discover a row's address from its detail page and caches the result, so a
+// source need not embed addresses in its parsed rows. Sources that already
+// parse an address (and set WaitlistRow.Address) don't implement this.
+type AddressResolver interface {
+	LookupAddress(ctx context.Context, detailURL string) (string, error)
+}

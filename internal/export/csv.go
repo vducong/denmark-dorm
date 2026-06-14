@@ -26,8 +26,9 @@ func SortRows(rows []model.WaitlistRow) []model.WaitlistRow {
 	return out
 }
 
-// WriteCSV writes sorted rows to path with a stable header, creating the parent directory if needed.
-func WriteCSV(path string, rows []model.WaitlistRow, prevOrders map[string]int) error {
+// WriteCSV writes sorted rows to path with a stable header, creating the parent
+// directory if needed. commuteCols names the commute columns to append (nil to omit).
+func WriteCSV(path string, rows []model.WaitlistRow, prevOrders map[string]int, commuteCols []string) error {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("create csv dir: %w", err)
@@ -41,7 +42,7 @@ func WriteCSV(path string, rows []model.WaitlistRow, prevOrders map[string]int) 
 	defer f.Close()
 
 	w := csv.NewWriter(f)
-	for _, rec := range Records(rows, prevOrders) {
+	for _, rec := range Records(rows, prevOrders, commuteCols) {
 		if err := w.Write(rec); err != nil {
 			return fmt.Errorf("write row: %w", err)
 		}

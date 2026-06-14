@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"os"
+	"reflect"
 	"testing"
 
 	"housing-waitlist/internal/model"
@@ -20,17 +21,18 @@ func TestParseHTML(t *testing.T) {
 
 	// Three signed-up tenancies across two buildings; the not-signed-up
 	// ("Sign up for this tenancy") row carries no rank label and is skipped.
+	// The link text doubles as RoomType and Address (it is a full street address).
 	want := []model.WaitlistRow{
-		{RequestID: "3735", Dorm: "Nørrebrogade", URL: "https://mit.s.dk/studiebolig/tenancy/3735/", RoomType: "Nørrebrogade 9E 2 206, 2200 København N", Size: "33", RankDisplay: "G", RankOrder: 7},
-		{RequestID: "3736", Dorm: "Nørrebrogade", URL: "https://mit.s.dk/studiebolig/tenancy/3736/", RoomType: "Nørrebrogade 9D 3 302, 2200 København N", Size: "31", RankDisplay: "F", RankOrder: 6},
-		{RequestID: "23043", Dorm: "Enghavevej", URL: "https://mit.s.dk/studiebolig/tenancy/23043/", RoomType: "Enghavevej 70 3 tv., 1503 København V", Size: "58", RankDisplay: "Not set", RankOrder: 99},
+		{RequestID: "3735", Dorm: "Nørrebrogade", URL: "https://mit.s.dk/studiebolig/tenancy/3735/", RoomType: "Nørrebrogade 9E 2 206, 2200 København N", Size: "33", RankDisplay: "G", RankOrder: 7, Address: "Nørrebrogade 9E 2 206, 2200 København N"},
+		{RequestID: "3736", Dorm: "Nørrebrogade", URL: "https://mit.s.dk/studiebolig/tenancy/3736/", RoomType: "Nørrebrogade 9D 3 302, 2200 København N", Size: "31", RankDisplay: "F", RankOrder: 6, Address: "Nørrebrogade 9D 3 302, 2200 København N"},
+		{RequestID: "23043", Dorm: "Enghavevej", URL: "https://mit.s.dk/studiebolig/tenancy/23043/", RoomType: "Enghavevej 70 3 tv., 1503 København V", Size: "58", RankDisplay: "Not set", RankOrder: 99, Address: "Enghavevej 70 3 tv., 1503 København V"},
 	}
 
 	if len(res.Rows) != len(want) {
 		t.Fatalf("got %d rows, want %d: %+v", len(res.Rows), len(want), res.Rows)
 	}
 	for i, w := range want {
-		if res.Rows[i] != w {
+		if !reflect.DeepEqual(res.Rows[i], w) {
 			t.Errorf("row %d:\n got %+v\nwant %+v", i, res.Rows[i], w)
 		}
 	}

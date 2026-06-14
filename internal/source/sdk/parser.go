@@ -66,14 +66,19 @@ func parseRow(tr *goquery.Selection, dorm string) (model.WaitlistRow, bool) {
 	}
 
 	display, order := rankFromLabel(label)
+	// The link text is a full street address (e.g. "Nørrebrogade 9E 2 206,
+	// 2200 København N"), so it doubles as both the room label and the commute
+	// origin; KKIK has no such address and resolves its origin from config.
+	addr := normalizeSpace(link.Text())
 	return model.WaitlistRow{
 		RequestID:   m[1],
 		Dorm:        dorm,
 		URL:         absoluteURL(href),
-		RoomType:    normalizeSpace(link.Text()),
+		RoomType:    addr,
 		Size:        sizeRe.FindString(tr.Find("td:has(sup)").First().Text()),
 		RankDisplay: display,
 		RankOrder:   order,
+		Address:     addr,
 	}, true
 }
 

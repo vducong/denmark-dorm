@@ -30,6 +30,7 @@ func Update(
 	csvDir string,
 	note string,
 	rankOrder func(string) (int, bool),
+	commuteCols []string,
 ) (string, error) {
 	httpClient, err := client(ctx, google)
 	if err != nil {
@@ -53,7 +54,7 @@ func Update(
 	}
 
 	now := time.Now()
-	values, err := BuildMatrix(rows, snapshots, resp.Values, now, note, rankOrder)
+	values, err := BuildMatrix(rows, snapshots, resp.Values, now, note, rankOrder, commuteCols)
 	if err != nil {
 		return "", err
 	}
