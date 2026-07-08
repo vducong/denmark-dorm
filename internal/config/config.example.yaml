@@ -19,17 +19,21 @@ google:
   oauth_client_file: ./internal/config/client_secret.json
   oauth_token_file: ./internal/config/token.json
 
-# Commute-time estimation. Shared across sources. For every dorm and every
-# destination below we compute three numbers: transit-morning (arrive by
-# `arrive_by`), transit-evening (leave at `depart_at`), and walk. Each is cached
-# to `cache_path`, so the backend is hit only once per (origin, destination,
-# time). Delete the cache file to force a recompute after changing addresses/times.
+# Commute-time estimation. Shared across sources. 
+# For every dorm and every destination below we compute three numbers: 
+# - transit-morning (arrive by `arrive_by`), 
+# - transit-evening (leave at `depart_at`), 
+# - walk. 
+# Each is cached to `cache_path`, so the backend is hit only once per (origin, destination, time). 
+#Delete the cache file to force a recompute after changing addresses/times.
 # Env: COMMUTE_PROVIDER, COMMUTE_API_KEY
 commute:
   enabled: true
-  provider: google                # routing backend. Pluggable: only "google" today
-                                  # (Google Maps Routes API). Add an adapter in
-                                  # internal/commute + a case in NewRouter for others.
+  
+  # routing backend. 
+  # Pluggable: only "google" today (Google Maps Routes API). 
+  #Add an adapter in internal/commute + a case in NewRouter for others.
+  provider: google                
   api_key: ""                     # backend key (Google: Maps Platform key, Routes API enabled)
   arrive_by: "08:00"              # be at campus before the first class (weekday, CPH)
   depart_at: "17:00"              # worst-case time you leave campus (weekday, CPH)
@@ -39,74 +43,58 @@ commute:
       address: "Solbjerg Plads 3, 2000 Frederiksberg, Denmark"
     - name: rda
       address: "Philip De Langes Allé 10, 1435 København, Denmark"
-  # OPTIONAL override map. KKIK addresses are discovered automatically from each
-  # dorm's property page and cached, so you normally leave this empty. Add a
-  # "<exact dorm name>": "<address>" line only to correct a specific dorm.
-  # (s.dk rows already include an address and never need an entry.)
+  # OPTIONAL override map.
+  # Add a "<exact dorm name>": "<address>" line only to correct a specific dorm.
   dorm_addresses: {}
-
-# Dorm scoring. Runs SEPARATELY from the ranking crawl: `--score-only`
-# (make score) crawls each source fresh and writes one merged, best-first CSV at
-# `output_path` — it never writes the per-source ranking CSV, the sheet, or
-# email, so you can re-run it freely. Each room is scored on two axes:
-#   desirability = rent + commute + size (how good the room is)
-#   opportunity  = desirability blended with your waitlist position (how
-#                  realistically you can get it; rank is normalized per source)
-# Scores are 0-100. Rent uses the midpoint of a range; the budget gate uses the
-# minimum. Sources that expose a full public catalog (currently kkik and sdk)
-# are scored across every listed room, not just ones you've already applied
-# to; a source without one falls back to scoring only your own waitlist.
 scoring:
   enabled: true
   output_path: ./data/candidates.csv
-  max_rent: 0                # DKK/mo hard budget cap; rooms whose cheapest rent
-                             # exceeds it are dropped. 0 = no gate (and rent is
-                             # then scored by relative min-max instead of a band).
+  
+  # DKK/mo hard budget cap; rooms whose cheapest rent exceeds it are dropped. 
+  # 0 = no gate (and rent is then scored by relative min-max instead of a band).
+  max_rent: 0                
   rent_floor: 0              # DKK/mo lower anchor of the rent score band.
   commute_best_min: 20       # commute <= this scores 1.0
   commute_worst_min: 50      # commute >= this scores 0.0
-  rank_weight: 0.5           # opportunity = (1-rank_weight)*desirability
-                             #             + rank_weight*rank_score
+  rank_weight: 0.5           # opportunity = (1-rank_weight)*desirability + rank_weight*rank_score
   sort_by: desirability      # lead score for the merged CSV: desirability | opportunity
   weights:                   # desirability factor shares (omit the block for 0.4/0.3/0.3)
     commute: 0.4
     size: 0.3
     rent: 0.3
 
-# Per-source settings. Add a block per source; run all enabled sources, or
-# select with --source <name>[,<name>...].
+# Per-source settings. 
+#Add a block per source; run all enabled sources, or select with --source <name>[,<name>...].
 sources:
   kkik:
     enabled: true
-    # steps default to true when omitted; crawl (fetch + CSV) always runs.
     steps:
       email: true   # include this source's section in the combined email
-      sheet: true    # upload rows (also requires sheet.spreadsheet_id)
-    # Login. Env override: KKIK_EMAIL, KKIK_PASSWORD
+      sheet: true   # upload rows (also requires sheet.spreadsheet_id)
     login:
       email: you@example.com
       password: your-password
-    headless: true       # set false to watch the browser (debugging)
-    timeout_sec: 120     # env: KKIK_TIMEOUT_SEC
-    # debug_dir: ./debug # env: KKIK_DEBUG_DIR
+    headless: true
+    timeout_sec: 120
+    # debug_dir: ./debug
     sheet:
       spreadsheet_id: ""
       sheet_name: Sheet1
-    data_dir: ./data/kkik  # CSV history dir (defaults to ./data/<source>)
+    data_dir: ./data/kkik
 
-  sdk:                     # mit.s.dk/studiebolig
+  # mit.s.dk/studiebolig
+  sdk:                  
     enabled: true
     steps:
-      email: true   # include this source's section in the combined email
+      email: true
       sheet: true
-    # Login. Env override: SDK_EMAIL, SDK_PASSWORD
     login:
       email: you@example.com
       password: your-password
-    headless: true       # set false to watch the browser (debugging)
-    timeout_sec: 600     # env: SDK_TIMEOUT_SEC (crawls one page per property)
-    # debug_dir: ./debug # env: SDK_DEBUG_DIR
+    headless: true
+    timeout_sec: 600
+    # debug_dir: ./debug
     sheet:
       spreadsheet_id: ""
       sheet_name: Sheet1
-    data_dir: ./data/sdk  # CSV history dir (defaults to ./data/<source>)
+    data_dir: ./data/sdk
