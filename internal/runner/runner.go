@@ -15,6 +15,8 @@ import (
 	"housing-waitlist/internal/config"
 	"housing-waitlist/internal/export"
 	"housing-waitlist/internal/mailer"
+	"housing-waitlist/internal/model"
+	"housing-waitlist/internal/scoring"
 	"housing-waitlist/internal/sheets"
 	"housing-waitlist/internal/source"
 )
@@ -62,24 +64,25 @@ func Run(ctx context.Context, cfg *config.Config, settings []config.SourceSettin
 	return nil
 }
 
-// runSource runs one source through fetch → parse → enrich → CSV → sheet and
-// returns its email section, or nil when the source's email step is off (or
-// --no-email). resolver is nil when commute is disabled.
-func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings, resolver *commute.Resolver, commuteCols, destNames []string, opts Options) (*mailer.Section, error) {
+// crawl runs fetch → parse → commute enrich for one source and returns the
+// constructed source plus its parsed result. It is shared by the ranking
+// pipeline (runSource) and the standalone scoring run (RunScoring). resolver is
+// nil when commute is disabled; enrichment failure is best-effort and leaves the
+// commute cells blank rather than aborting.
+func crawl(ctx context.Context, s config.SourceSettings, resolver *commute.Resolver, opts Options) (source.Source, *model.Result, error) {
 	src, err := source.New(s.Name, s)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	desc := src.Descriptor()
 
 	slog.Info("scraping...", "source", s.Name)
 	html, err := src.Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		return nil, nil, fmt.Errorf("fetch: %w", err)
 	}
 	if opts.DumpHTML != "" {
 		if err := os.WriteFile(opts.DumpHTML, []byte(html), 0o644); err != nil {
-			return nil, fmt.Errorf("dump html: %w", err)
+			return nil, nil, fmt.Errorf("dump html: %w", err)
 		}
 		slog.Info("saved html", "path", opts.DumpHTML)
 	}
@@ -87,14 +90,10 @@ func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings,
 	slog.Info("parsing...", "source", s.Name)
 	result, err := src.Parse(html)
 	if err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
+		return nil, nil, fmt.Errorf("parse: %w", err)
 	}
 	slog.Info("parsed rows", "source", s.Name, "count", len(result.Rows))
 
-	// Enrich rows with commute estimates before any export reads them. A failure
-	// here never aborts the scrape — it just leaves the commute cells blank.
-	// Sources that expose only a name + URL (KKIK) supply an address lookup so the
-	// resolver can discover and cache each dorm's address.
 	if resolver != nil {
 		var lookupAddr commute.AddressLookup
 		if ar, ok := src.(source.AddressResolver); ok {
@@ -104,6 +103,17 @@ func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings,
 			slog.Warn("commute enrichment failed; continuing without commute", "source", s.Name, "err", err)
 		}
 	}
+	return src, result, nil
+}
+
+// runSource runs one source through crawl → CSV → sheet and returns its email
+// section, or nil when the source's email step is off (or --no-email).
+func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings, resolver *commute.Resolver, commuteCols, destNames []string, opts Options) (*mailer.Section, error) {
+	src, result, err := crawl(ctx, s, resolver, opts)
+	if err != nil {
+		return nil, err
+	}
+	desc := src.Descriptor()
 
 	prev, err := export.LoadPrevRanks(s.DataDir, src.RankOrder)
 	if err != nil {
@@ -146,6 +156,76 @@ func runSource(ctx context.Context, cfg *config.Config, s config.SourceSettings,
 		CSVPath:   csvPath,
 		SheetURL:  sheetURL,
 	}, nil
+}
+
+// RunScoring crawls every selected source fresh and writes the merged
+// best-candidates CSV. Sources that implement source.CatalogSource are scraped
+// via their full public catalog (all listed buildings, unranked); others fall
+// back to the personal-waitlist fetch with rent enrichment. It is fully
+// independent of the ranking pipeline: it never writes per-source history CSVs,
+// updates sheets, or sends email.
+func RunScoring(ctx context.Context, cfg *config.Config, settings []config.SourceSettings, opts Options) error {
+	resolver, commuteCols, destNames := setupCommute(cfg)
+
+	var inputs []scoring.Input
+	for _, s := range settings {
+		src, err := source.New(s.Name, s)
+		if err != nil {
+			return fmt.Errorf("source %s: %w", s.Name, err)
+		}
+
+		var result *model.Result
+		if cs, ok := src.(source.CatalogSource); ok {
+			// Discovery mode: score every building in the portal's public catalog.
+			slog.Info("scraping catalog...", "source", s.Name)
+			result, err = cs.FetchCatalog(ctx)
+			if err != nil {
+				return fmt.Errorf("source %s: catalog: %w", s.Name, err)
+			}
+			slog.Info("catalog rows", "source", s.Name, "count", len(result.Rows))
+			// Commute enrichment: FetchCatalog populates Address but does not
+			// query the routing backend — that happens here, same as the ranking
+			// path.
+			if resolver != nil {
+				var lookupAddr commute.AddressLookup
+				if ar, ok := src.(source.AddressResolver); ok {
+					lookupAddr = ar.LookupAddress
+				}
+				if err := resolver.Enrich(ctx, result.Rows, lookupAddr); err != nil {
+					slog.Warn("commute enrichment failed; continuing without commute", "source", s.Name, "err", err)
+				}
+			}
+		} else {
+			// Personal-waitlist fallback: crawl() handles fetch → parse → commute
+			// enrich. Rent is then joined from the source's public catalog.
+			var crawlSrc source.Source
+			crawlSrc, result, err = crawl(ctx, s, resolver, opts)
+			if err != nil {
+				return fmt.Errorf("source %s: %w", s.Name, err)
+			}
+			if rr, ok := crawlSrc.(source.RentResolver); ok {
+				if err := rr.EnrichRent(ctx, result.Rows); err != nil {
+					slog.Warn("rent enrichment failed; continuing without rent", "source", s.Name, "err", err)
+				}
+			}
+		}
+
+		for _, row := range result.Rows {
+			inputs = append(inputs, scoring.Input{Source: s.Name, Row: row})
+		}
+	}
+
+	if len(inputs) == 0 {
+		slog.Warn("scoring: no rows to score")
+		return nil
+	}
+	ranked := scoring.Rank(inputs, scoringSettings(cfg, destNames))
+	if err := export.WriteCandidates(cfg.Scoring.OutputPath, commuteCols, ranked); err != nil {
+		return fmt.Errorf("write candidates: %w", err)
+	}
+	abs, _ := filepath.Abs(cfg.Scoring.OutputPath)
+	slog.Info("wrote candidates", "path", abs, "rows", len(ranked))
+	return nil
 }
 
 // setupCommute builds the shared commute resolver and ordered commute column list
@@ -197,6 +277,23 @@ func commuteSettings(cfg *config.Config, now time.Time) commute.Settings {
 		DepartAt:      nextWeekday(now, cfg.Commute.DepartAt, loc),
 		DormAddresses: cfg.Commute.DormAddresses,
 		CachePath:     cfg.Commute.CachePath,
+	}
+}
+
+// scoringSettings projects the shared scoring config onto the scorer's
+// settings, threading in the commute destinations to average over.
+func scoringSettings(cfg *config.Config, destNames []string) scoring.Settings {
+	sc := cfg.Scoring
+	return scoring.Settings{
+		Enabled:         sc.Enabled,
+		MaxRent:         sc.MaxRent,
+		RentFloor:       sc.RentFloor,
+		CommuteBestMin:  sc.CommuteBestMin,
+		CommuteWorstMin: sc.CommuteWorstMin,
+		Weights:         scoring.Weights{Commute: sc.Weights.Commute, Size: sc.Weights.Size, Rent: sc.Weights.Rent},
+		RankWeight:      sc.RankWeight,
+		SortBy:          sc.SortBy,
+		DestNames:       destNames,
 	}
 }
 

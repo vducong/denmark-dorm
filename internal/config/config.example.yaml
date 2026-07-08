@@ -45,6 +45,34 @@ commute:
   # (s.dk rows already include an address and never need an entry.)
   dorm_addresses: {}
 
+# Dorm scoring. Runs SEPARATELY from the ranking crawl: `--score-only`
+# (make score) crawls each source fresh and writes one merged, best-first CSV at
+# `output_path` — it never writes the per-source ranking CSV, the sheet, or
+# email, so you can re-run it freely. Each room is scored on two axes:
+#   desirability = rent + commute + size (how good the room is)
+#   opportunity  = desirability blended with your waitlist position (how
+#                  realistically you can get it; rank is normalized per source)
+# Scores are 0-100. Rent uses the midpoint of a range; the budget gate uses the
+# minimum. Sources that expose a full public catalog (currently kkik and sdk)
+# are scored across every listed room, not just ones you've already applied
+# to; a source without one falls back to scoring only your own waitlist.
+scoring:
+  enabled: true
+  output_path: ./data/candidates.csv
+  max_rent: 0                # DKK/mo hard budget cap; rooms whose cheapest rent
+                             # exceeds it are dropped. 0 = no gate (and rent is
+                             # then scored by relative min-max instead of a band).
+  rent_floor: 0              # DKK/mo lower anchor of the rent score band.
+  commute_best_min: 20       # commute <= this scores 1.0
+  commute_worst_min: 50      # commute >= this scores 0.0
+  rank_weight: 0.5           # opportunity = (1-rank_weight)*desirability
+                             #             + rank_weight*rank_score
+  sort_by: desirability      # lead score for the merged CSV: desirability | opportunity
+  weights:                   # desirability factor shares (omit the block for 0.4/0.3/0.3)
+    commute: 0.4
+    size: 0.3
+    rent: 0.3
+
 # Per-source settings. Add a block per source; run all enabled sources, or
 # select with --source <name>[,<name>...].
 sources:

@@ -24,6 +24,14 @@ const (
 	defaultCommuteProvider = "google"
 	defaultArriveBy        = "08:00"
 	defaultDepartAt        = "17:00"
+
+	// Scoring defaults: commute scored best at ≤20 min / worst at ≥60 min, the
+	// opportunity blend leans half on waitlist position, and the merged list
+	// leads with the desirability score.
+	defaultCommuteBestMin    = 20
+	defaultCommuteWorstMin   = 60
+	defaultScoringRankWeight = 0.5
+	defaultScoringSortBy     = "desirability"
 )
 
 // Config is the application configuration (YAML + optional env overrides).
@@ -34,6 +42,7 @@ type Config struct {
 	SMTP    SMTP    `yaml:"smtp"`
 	Google  Google  `yaml:"google"`
 	Commute Commute `yaml:"commute"`
+	Scoring Scoring `yaml:"scoring"`
 	Sources Sources `yaml:"sources"`
 }
 
@@ -82,6 +91,35 @@ type Commute struct {
 type CommuteDestination struct {
 	Name    string `yaml:"name"`
 	Address string `yaml:"address"`
+}
+
+// Scoring holds the shared dorm-scoring settings. It ranks every crawled room
+// by desirability (rent + commute + size) and opportunity (desirability blended
+// with waitlist position) into one merged CSV at OutputPath.
+//
+// MaxRent is a hard budget gate (DKK/mo): rooms whose cheapest rent exceeds it
+// are dropped, and it also anchors the rent score band [RentFloor, MaxRent]; a
+// zero MaxRent disables the gate and scores rent by relative min-max instead.
+// Commute is scored on the fixed band [CommuteBestMin, CommuteWorstMin] minutes.
+// SortBy picks the lead score ("desirability" or "opportunity").
+type Scoring struct {
+	Enabled         bool           `yaml:"enabled"`
+	OutputPath      string         `yaml:"output_path"`
+	MaxRent         int            `yaml:"max_rent"`
+	RentFloor       int            `yaml:"rent_floor"`
+	CommuteBestMin  int            `yaml:"commute_best_min"`
+	CommuteWorstMin int            `yaml:"commute_worst_min"`
+	RankWeight      float64        `yaml:"rank_weight"`
+	SortBy          string         `yaml:"sort_by"`
+	Weights         ScoringWeights `yaml:"weights"`
+}
+
+// ScoringWeights is each factor's share of the desirability score. When all
+// three are zero (the block is omitted) applyDefaults sets 0.4/0.3/0.3.
+type ScoringWeights struct {
+	Commute float64 `yaml:"commute"`
+	Size    float64 `yaml:"size"`
+	Rent    float64 `yaml:"rent"`
 }
 
 // Sources holds one block per registered source.
@@ -211,6 +249,33 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Commute.CachePath == "" {
 		c.Commute.CachePath = filepath.Join("data", "commute_cache.json")
+	}
+	c.applyScoringDefaults()
+}
+
+func (c *Config) applyScoringDefaults() {
+	s := &c.Scoring
+	if s.OutputPath == "" {
+		s.OutputPath = filepath.Join("data", "candidates.csv")
+	}
+	if s.CommuteBestMin <= 0 {
+		s.CommuteBestMin = defaultCommuteBestMin
+	}
+	if s.CommuteWorstMin <= 0 {
+		s.CommuteWorstMin = defaultCommuteWorstMin
+	}
+	if s.SortBy == "" {
+		s.SortBy = defaultScoringSortBy
+	}
+	// A zero rank_weight makes opportunity identical to desirability, so treat
+	// it as unset and apply the blend default.
+	if s.RankWeight <= 0 {
+		s.RankWeight = defaultScoringRankWeight
+	}
+	// Default the weights only when the whole block is omitted (all zero), so a
+	// deliberate single-factor weighting is preserved.
+	if s.Weights == (ScoringWeights{}) {
+		s.Weights = ScoringWeights{Commute: 0.4, Size: 0.3, Rent: 0.3}
 	}
 }
 

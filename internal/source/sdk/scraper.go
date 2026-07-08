@@ -138,16 +138,17 @@ func fetchBuildingTables(browserCtx context.Context, b building) (string, error)
 	runCtx, cancelRun := context.WithTimeout(tabCtx, buildingTimeout)
 	defer cancelRun()
 
-	var tables string
+	var tables, rentGroups string
 	if err := chromedp.Run(runCtx,
 		chromedp.Navigate(baseURL+b.URL),
 		chromedp.WaitReady("body", chromedp.ByQuery),
 		loadBuildingRankings(),
 		captureRankingTables(&tables),
+		captureRentGroups(&rentGroups),
 	); err != nil {
 		return "", err
 	}
-	return tables, nil
+	return tables + rentGroups, nil
 }
 
 // dismissCookieConsent clicks the cookie-accept banner if present so it cannot
@@ -340,6 +341,21 @@ func captureRankingTables(out *string) chromedp.Action {
 	js := `[...document.querySelectorAll('table')]
 		.filter(t => t.querySelector('` + selRankCell + `'))
 		.map(t => t.outerHTML).join('')`
+	return chromedp.Evaluate(js, out)
+}
+
+// captureRentGroups returns a <div class="sdk-rent-groups"> holding one span per
+// room-type group on the building page, each carrying that group's size and
+// monthly-rent band (e.g. "37-37 m2, 2588-2875 kr.") read from its accordion
+// header. s.dk shows rent only per group, so the parser matches a tenancy to its
+// group by size. Best-effort: a building with no rent headers yields an empty
+// div and the rows simply keep unknown rent.
+func captureRentGroups(out *string) chromedp.Action {
+	js := `'<div class="sdk-rent-groups">' + [...document.querySelectorAll('.card-header .text-muted')]
+		.map(e => (e.textContent || '').trim())
+		.filter(t => /kr\.?/.test(t))
+		.map(t => '<span>' + t.replace(/[<>]/g, '') + '</span>')
+		.join('') + '</div>'`
 	return chromedp.Evaluate(js, out)
 }
 

@@ -30,6 +30,7 @@ func run() int {
 	listSources := flag.Bool("list-sources", false, "print registered sources and exit")
 	noEmail := flag.Bool("no-email", false, "skip the email step for this run")
 	noSheet := flag.Bool("no-sheet", false, "skip the Google Sheets step for this run")
+	scoreOnly := flag.Bool("score-only", false, "crawl fresh and write only the scored candidates CSV (no ranking CSV, sheet, or email)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -78,6 +79,13 @@ func run() int {
 	}
 
 	opts := runner.Options{DumpHTML: *dumpHTML, NoEmail: *noEmail, NoSheet: *noSheet}
+	if *scoreOnly {
+		if err := runner.RunScoring(ctx, cfg, settings, opts); err != nil {
+			slog.Error("score", "err", err)
+			return 1
+		}
+		return 0
+	}
 	if err := runner.Run(ctx, cfg, settings, opts); err != nil {
 		slog.Error("run", "err", err)
 		return 1

@@ -16,6 +16,10 @@ package model
 // Commute maps a commute column name (e.g. "cbs_transit_morning_min") to its
 // value in whole minutes, or "" when unknown; it is always read through the
 // pipeline's ordered column list, so iteration order never depends on the map.
+//
+// RentMin and RentMax are the monthly rent bounds in DKK (equal for a single
+// value, both zero when unknown); a source that exposes only a range fills
+// both, and scoring uses the midpoint while the budget gate uses the minimum.
 type WaitlistRow struct {
 	RequestID   string
 	Dorm        string
@@ -26,6 +30,8 @@ type WaitlistRow struct {
 	RankOrder   int
 	Address     string
 	Commute     map[string]string
+	RentMin     int
+	RentMax     int
 }
 
 // Result is the parsed page content for one source.

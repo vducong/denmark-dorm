@@ -36,10 +36,16 @@ func parseHTML(htmlStr string) (*model.Result, error) {
 	var rows []model.WaitlistRow
 	doc.Find("section.sdk-building").Each(func(_ int, sec *goquery.Selection) {
 		dorm := strings.TrimSpace(sec.AttrOr("data-name", ""))
+		groups := parseRentGroups(sec)
 		sec.Find("tr").Each(func(_ int, tr *goquery.Selection) {
-			if row, ok := parseRow(tr, dorm); ok {
-				rows = append(rows, row)
+			row, ok := parseRow(tr, dorm)
+			if !ok {
+				return
 			}
+			if min, max, ok := rentForSize(groups, row.Size); ok {
+				row.RentMin, row.RentMax = min, max
+			}
+			rows = append(rows, row)
 		})
 	})
 

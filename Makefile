@@ -7,7 +7,7 @@ CONFIG     := internal/config/config.yaml
 CONFIG_EXAMPLE := internal/config/config.example.yaml
 DEBUG_HTML := debug.html
 
-.PHONY: help build test clean run run-no-email dump install auth-sheets list-sources
+.PHONY: help build test clean run run-no-email score dump install auth-sheets list-sources
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -33,6 +33,10 @@ run: build ## Run all enabled sources: scrape + CSV + sheet + email (requires co
 run-no-email: build ## Run all enabled sources, skip email
 	@test -f $(CONFIG) || (echo "error: cp $(CONFIG_EXAMPLE) $(CONFIG) and edit" >&2 && exit 1)
 	./$(BINARY) --no-email
+
+score: build ## Crawl fresh and write the scored candidates CSV only (no ranking CSV/sheet/email)
+	@test -f $(CONFIG) || (echo "error: cp $(CONFIG_EXAMPLE) $(CONFIG) and edit" >&2 && exit 1)
+	./$(BINARY) --score-only
 
 dump: build ## Scrape one source, save HTML to debug.html, skip email + sheet (SRC=kkik)
 	@test -f $(CONFIG) || (echo "error: cp $(CONFIG_EXAMPLE) $(CONFIG) and edit" >&2 && exit 1)

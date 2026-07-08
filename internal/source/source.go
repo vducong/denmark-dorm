@@ -37,3 +37,21 @@ type Source interface {
 type AddressResolver interface {
 	LookupAddress(ctx context.Context, detailURL string) (string, error)
 }
+
+// RentResolver is an optional capability for sources that can enrich their rows
+// with monthly rent (RentMin/RentMax in DKK). Rent isn't on a source's waitlist
+// page, so the source fetches it from its public catalog and joins it onto the
+// rows. Only the scoring run calls this — the ranking pipeline never does.
+type RentResolver interface {
+	EnrichRent(ctx context.Context, rows []model.WaitlistRow) error
+}
+
+// CatalogSource is an optional capability for sources that can expose their
+// full public catalog of available rooms, independent of the applicant's
+// personal waitlist. When a source implements this, RunScoring uses FetchCatalog
+// instead of Fetch so every listed building is scored — not only rooms the
+// applicant has already applied to. Returned rows are unranked (RankOrder=99,
+// RankDisplay="") and scored on desirability only.
+type CatalogSource interface {
+	FetchCatalog(ctx context.Context) (*model.Result, error)
+}
