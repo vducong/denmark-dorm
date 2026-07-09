@@ -128,7 +128,7 @@ func writeSection(b *strings.Builder, s Section) {
 	fmt.Fprintf(b, `<h2>%s waitlist:</h2>`, html.EscapeString(s.Title))
 	fmt.Fprintf(b, `<p>Rows: %d<br>`, len(s.Result.Rows))
 	if s.Result.Meta.ApplicantName != "" {
-		fmt.Fprintf(b, `Applicant: %s (aka em pé cụa anh)<br>`, html.EscapeString(s.Result.Meta.ApplicantName))
+		fmt.Fprintf(b, `Applicant: %s<br>`, html.EscapeString(s.Result.Meta.ApplicantName))
 	}
 	if s.Result.Meta.RenewalDeadline != "" {
 		fmt.Fprintf(b, `Renew before: %s<br>`, html.EscapeString(s.Result.Meta.RenewalDeadline))
